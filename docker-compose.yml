@@ -3,17 +3,19 @@ version: '3.8'
 services:
   db:
     image: postgres:15
+    restart: unless-stopped
     volumes:
       - /srv/docker_conf/trade/postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-tradeuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tradepass}
+      POSTGRES_DB: ${POSTGRES_DB:-tradedb}
     ports:
       - "5432:5432"
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     volumes:
       - /srv/docker_conf/trade/redis_data:/data
     command: redis-server --save 60 1 --loglevel warning
@@ -23,29 +25,28 @@ services:
   backend:
     build: 
       context: ./backend
+    restart: unless-stopped
     volumes:
-      - ./backend:/app
       - /srv/docker_conf/trade/backend_data:/app/data
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey_change_in_production}
     ports:
       - "8000:8000"
     depends_on:
       - db
       - redis
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   celery_worker:
     build:
       context: ./backend
+    restart: unless-stopped
     volumes:
-      - ./backend:/app
       - /srv/docker_conf/trade/backend_data:/app/data
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       - db
       - redis
@@ -55,12 +56,12 @@ services:
   celery_beat:
     build:
       context: ./backend
+    restart: unless-stopped
     volumes:
-      - ./backend:/app
       - /srv/docker_conf/trade/backend_data:/app/data
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     depends_on:
       - db
       - redis
@@ -70,11 +71,8 @@ services:
   frontend:
     build:
       context: ./frontend
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    restart: unless-stopped
     ports:
-      - "3090:5173"
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    command: npm run dev -- --host 0.0.0.0
+      - "3090:80"
+    depends_on:
+      - backend
