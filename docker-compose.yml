@@ -10,8 +10,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-tradeuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tradepass}
       POSTGRES_DB: ${POSTGRES_DB:-tradedb}
-    ports:
-      - "5432:5432"
 
   redis:
     image: redis:7-alpine
@@ -19,8 +17,6 @@ services:
     volumes:
       - /srv/docker_conf/trade/redis_data:/data
     command: redis-server --save 60 1 --loglevel warning
-    ports:
-      - "6379:6379"
 
   backend:
     build: 
@@ -32,8 +28,6 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SECRET_KEY=${SECRET_KEY:-supersecretkey_change_in_production}
-    ports:
-      - "8000:8000"
     depends_on:
       - db
       - redis
