@@ -1,5 +1,11 @@
 # 📊 TradeAnalyzer Pro — Specifica Tecnica Completa
 
+**Versione Attuale:** v0.1.0
+
+## Changelog
+- **v0.1.0** (In corso): Setup infrastruttura base, Docker stack (porta 3090, volumi su `/srv/docker_conf/trade`), inizializzazione repository. Inizio implementazione Knowledge Engine.
+- **v0.0.1**: Creazione documento specifiche iniziali (TRADING_APP_SPEC.md).
+
 > **Versione**: 1.0  
 > **Data**: 2026-09-14  
 > **Target**: Webapp Docker-based per gestione portafoglio, analisi tecnica avanzata e previsioni di trading  
