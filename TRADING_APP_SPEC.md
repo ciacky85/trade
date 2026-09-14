@@ -3,7 +3,7 @@
 **Versione Attuale:** v0.1.0
 
 ## Changelog
-- **v0.1.0** (In corso): Setup infrastruttura base, Docker stack (porta 3090, volumi su `/srv/docker_conf/trade`), inizializzazione repository. Inizio implementazione Knowledge Engine.
+- **v0.1.0**: Setup infrastruttura base, Docker stack su porta 3090, mappatura volumi su `/srv/docker_conf/trade` (`/strategies`, `/knowledge`, `/outputs`, `/results`, `/backtests`, `/news_cache`, `/postgres_data`, `/redis_data`), frontend reattivo e interattivo con navigazione completa (Dashboard con candele reali e forecast sovrapposto, Transazioni & Portafoglio con dialog modale, Fonti grafici esterne, Knowledge Engine con catalogo strategie e 60+ pattern candlestick, Notizie & Sentiment AI FinBERT, Pagina stato archiviazione persistente).
 - **v0.0.1**: Creazione documento specifiche iniziali (TRADING_APP_SPEC.md).
 
 > **Versione**: 1.0  

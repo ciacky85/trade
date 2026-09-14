@@ -23,11 +23,12 @@ services:
       context: ./backend
     restart: unless-stopped
     volumes:
-      - /srv/docker_conf/trade/backend_data:/app/data
+      - /srv/docker_conf/trade:/app/storage
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SECRET_KEY=${SECRET_KEY:-supersecretkey_change_in_production}
+      - STORAGE_PATH=/app/storage
     depends_on:
       - db
       - redis
@@ -37,10 +38,11 @@ services:
       context: ./backend
     restart: unless-stopped
     volumes:
-      - /srv/docker_conf/trade/backend_data:/app/data
+      - /srv/docker_conf/trade:/app/storage
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - STORAGE_PATH=/app/storage
     depends_on:
       - db
       - redis
@@ -52,10 +54,11 @@ services:
       context: ./backend
     restart: unless-stopped
     volumes:
-      - /srv/docker_conf/trade/backend_data:/app/data
+      - /srv/docker_conf/trade:/app/storage
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://tradeuser:tradepass@db:5432/tradedb}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - STORAGE_PATH=/app/storage
     depends_on:
       - db
       - redis
