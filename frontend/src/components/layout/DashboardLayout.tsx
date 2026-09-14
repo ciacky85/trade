@@ -1,4 +1,3 @@
-import React from 'react';
 import { Activity, LayoutDashboard, Settings, TrendingUp, BookOpen, Clock, PlusCircle } from 'lucide-react';
 import { CombinedChart } from '../charts/CombinedChart';
 

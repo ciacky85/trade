@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, CandlestickSeries, ColorType } from 'lightweight-charts';
 
 interface ChartProps {
   data: any[];
@@ -25,7 +25,7 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
       height: 400,
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
       borderVisible: false,
@@ -47,7 +47,7 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
 
     // Add prediction series if available
     if (predictions && predictions.length > 0) {
-      const predSeries = chart.addCandlestickSeries({
+      const predSeries = chart.addSeries(CandlestickSeries, {
         upColor: 'rgba(56, 189, 248, 0.5)',
         downColor: 'rgba(56, 189, 248, 0.5)',
         borderVisible: false,
@@ -57,7 +57,7 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
       predSeries.setData(predictions);
     } else {
         // Mock prediction
-        const predSeries = chart.addCandlestickSeries({
+        const predSeries = chart.addSeries(CandlestickSeries, {
             upColor: 'rgba(56, 189, 248, 0.5)',
             downColor: 'rgba(56, 189, 248, 0.5)',
             borderVisible: false,
