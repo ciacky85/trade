@@ -1,5 +1,8 @@
 import pandas as pd
-import pandas_ta as ta
+try:
+    import pandas_ta_classic as ta
+except ImportError:
+    import pandas_ta as ta
 
 def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
