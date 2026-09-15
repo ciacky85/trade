@@ -13,9 +13,30 @@ import {
   ExternalLink,
   RefreshCw,
   CheckCircle2,
+  Maximize2,
   X
 } from 'lucide-react';
 import { CombinedChart } from '../charts/CombinedChart';
+
+const SCALE_OPTIONS = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', '5Y'];
+
+const translateRec = (rec?: string) => {
+  if (!rec) return 'MANTIENI';
+  const u = rec.toUpperCase();
+  if (u === 'BUY' || u === 'BULLISH') return 'ACQUISTA';
+  if (u === 'SELL' || u === 'BEARISH') return 'VENDI';
+  if (u === 'HOLD') return 'MANTIENI';
+  return rec;
+};
+
+const translateSentiment = (s?: string) => {
+  if (!s) return 'NEUTRO';
+  const u = s.toUpperCase();
+  if (u === 'BULLISH' || u === 'POSITIVE' || u === 'RIALZISTA') return 'RIALZISTA';
+  if (u === 'BEARISH' || u === 'NEGATIVE' || u === 'RIBASSISTA') return 'RIBASSISTA';
+  if (u === 'NEUTRAL' || u === 'NEUTRO') return 'NEUTRO';
+  return s;
+};
 
 interface Position {
   ticker: string;
@@ -91,6 +112,7 @@ interface AnalysisData {
   timeframe: string;
   current_price: number;
   recommendation: string;
+  recommendation_label?: string;
   confidence: number;
   reason: string;
   target_price: number;
@@ -110,7 +132,8 @@ export const DashboardLayout = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'portfolio' | 'analysis' | 'knowledge' | 'news' | 'settings'>('dashboard');
   const [selectedTicker, setSelectedTicker] = useState('NVDA');
   const [searchTicker, setSearchTicker] = useState('');
-  const [timeframe, setTimeframe] = useState('1D');
+  const [timeframe, setTimeframe] = useState('6M');
+  const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState(false);
 
   // Modals & form state
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -143,6 +166,17 @@ export const DashboardLayout = () => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
   };
+
+  // Close fullscreen on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreenChartOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Fetch initial portfolio & analysis
   useEffect(() => {
@@ -487,7 +521,7 @@ export const DashboardLayout = () => {
                 <div className="stat-card">
                   <h3>Consenso AI Knowledge Engine</h3>
                   <div className="stat-value" style={{ color: analysis?.recommendation === 'BUY' ? '#10b981' : analysis?.recommendation === 'SELL' ? '#ef4444' : '#38bdf8' }}>
-                    {analysis?.recommendation || 'BULLISH'}
+                    {analysis?.recommendation_label || translateRec(analysis?.recommendation)}
                   </div>
                   <div className="stat-change positive">Confidenza: {analysis?.confidence || 86}%</div>
                 </div>
@@ -497,7 +531,7 @@ export const DashboardLayout = () => {
                   <div className="stat-value" style={{ color: '#f8fafc' }}>
                     ${analysis?.current_price ? analysis.current_price.toFixed(2) : '158.40'}
                   </div>
-                  <div className="stat-change positive">R/R: {analysis?.risk_reward_ratio || '1:2.4'}</div>
+                  <div className="stat-change positive">Rapporto R/R: {analysis?.risk_reward_ratio || '1:2.4'}</div>
                 </div>
               </div>
 
@@ -519,7 +553,7 @@ export const DashboardLayout = () => {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                     <div className="chart-legend">
                       <div className="legend-item">
                         <div className="legend-color" style={{ background: '#10b981' }}></div>
@@ -527,33 +561,42 @@ export const DashboardLayout = () => {
                       </div>
                       <div className="legend-item">
                         <div className="legend-color" style={{ background: '#38bdf8' }}></div>
-                        <span>Candele Previste (AI Forecast)</span>
+                        <span>Candele Previste (Previsione AI)</span>
                       </div>
                     </div>
 
-                    <div className="chart-tabs">
-                      {['1D', '1W', '1M'].map((tf) => (
+                    <div className="scale-selector-bar">
+                      {SCALE_OPTIONS.map((scale) => (
                         <button
-                          key={tf}
-                          className={`tab ${timeframe === tf ? 'active' : ''}`}
-                          onClick={() => setTimeframe(tf)}
+                          key={scale}
+                          className={`scale-btn ${timeframe === scale ? 'active' : ''}`}
+                          onClick={() => setTimeframe(scale)}
                         >
-                          {tf}
+                          {scale}
                         </button>
                       ))}
                     </div>
+
+                    <button
+                      className="btn-maximize"
+                      title="Ingrandisci a tutto schermo"
+                      onClick={() => setIsFullscreenChartOpen(true)}
+                    >
+                      <Maximize2 size={16} /> Schermo Intero
+                    </button>
                   </div>
                 </div>
 
                 <div className="chart-container-inner">
                   {loading ? (
                     <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                      <RefreshCw size={24} className="animate-spin" style={{ marginRight: '8px' }} /> Caricamento dati e calcolo previsione...
+                      <RefreshCw size={24} className="animate-spin" style={{ marginRight: '8px' }} /> Caricamento dati e calcolo previsione scala {timeframe}...
                     </div>
                   ) : (
                     <CombinedChart
                       data={analysis?.historical_candles || []}
                       predictions={analysis?.prediction_candles || []}
+                      height={380}
                     />
                   )}
                 </div>
@@ -568,7 +611,7 @@ export const DashboardLayout = () => {
                       analysis.active_patterns.map((p, i) => (
                         <li key={i}>
                           <span className={`signal-dot ${p.signal > 0 ? 'positive' : p.signal < 0 ? 'negative' : 'neutral'}`}></span>
-                          <strong>{p.name}</strong>: Rilevato su timeframe {timeframe} ({p.signal > 0 ? 'Rialzista' : 'Ribassista'}).
+                          <strong>{p.name}</strong>: Rilevato su scala {timeframe} ({p.signal > 0 ? 'Rialzista' : 'Ribassista'}).
                         </li>
                       ))
                     ) : (
@@ -584,17 +627,17 @@ export const DashboardLayout = () => {
                 <div className="insight-card">
                   <h3>Azione Operativa Consigliata</h3>
                   <div className={`action-box ${analysis?.recommendation?.toLowerCase() || 'hold'}`}>
-                    <h4>{analysis?.recommendation || 'HOLD'} {selectedTicker}</h4>
-                    <p>{analysis?.reason || 'Attendere conferma della rottura del doppio minimo prima di incrementare la posizione.'}</p>
+                    <h4>{analysis?.recommendation_label || translateRec(analysis?.recommendation)} {selectedTicker}</h4>
+                    <p>{analysis?.reason || 'Fase di consolidamento. Attendere conferma al di sopra del livello di resistenza prima di incrementare la posizione.'}</p>
                     <div className="action-metrics">
                       <div className="action-metric-item">
-                        Target Price: <strong>${analysis?.target_price?.toFixed(2) || '171.00'}</strong>
+                        Prezzo Obiettivo: <strong>${analysis?.target_price?.toFixed(2) || '171.00'}</strong>
                       </div>
                       <div className="action-metric-item">
                         Stop Loss: <strong>${analysis?.stop_loss?.toFixed(2) || '148.50'}</strong>
                       </div>
                       <div className="action-metric-item">
-                        R/R: <strong>{analysis?.risk_reward_ratio || '1:2.4'}</strong>
+                        Rapporto R/R: <strong>{analysis?.risk_reward_ratio || '1:2.4'}</strong>
                       </div>
                     </div>
                   </div>
@@ -873,9 +916,9 @@ export const DashboardLayout = () => {
                     </div>
                     <p>{strat.description}</p>
                     <div className="feature-conditions">
-                      <div><strong style={{ color: '#10b981' }}>Trigger Buy:</strong> {strat.buy_condition}</div>
-                      <div><strong style={{ color: '#ef4444' }}>Trigger Sell:</strong> {strat.sell_condition}</div>
-                      <div><strong>Risk/Reward:</strong> {strat.risk_reward_ratio} | Confidenza: {(strat.confidence * 100).toFixed(0)}%</div>
+                      <div><strong style={{ color: '#10b981' }}>Attivazione Acquisto (Trigger Buy):</strong> {strat.buy_condition}</div>
+                      <div><strong style={{ color: '#ef4444' }}>Attivazione Vendita (Trigger Sell):</strong> {strat.sell_condition}</div>
+                      <div><strong>Rapporto Rischio/Rendimento:</strong> {strat.risk_reward_ratio} | Confidenza: {(strat.confidence * 100).toFixed(0)}%</div>
                     </div>
                   </div>
                 ))}
@@ -902,7 +945,7 @@ export const DashboardLayout = () => {
                     <div className="feature-card-header">
                       <span className="ticker-pill active">{item.ticker}</span>
                       <span className={`type-badge ${item.sentiment_label.toLowerCase()}`}>
-                        {item.sentiment_label} ({(item.sentiment_score * 100).toFixed(0)}%)
+                        {translateSentiment(item.sentiment_label)} ({(item.sentiment_score * 100).toFixed(0)}%)
                       </span>
                     </div>
                     <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{item.title}</h3>
@@ -1072,6 +1115,92 @@ export const DashboardLayout = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Chart Modal */}
+      {isFullscreenChartOpen && (
+        <div className="chart-fullscreen-overlay" onClick={() => setIsFullscreenChartOpen(false)}>
+          <div className="chart-fullscreen-container" onClick={(e) => e.stopPropagation()}>
+            <div className="fullscreen-topbar">
+              <div className="fullscreen-title-area">
+                <h2 className="fullscreen-ticker-title">{selectedTicker} — Grafico Storico & Previsione Sovrapposta</h2>
+                <div className="fullscreen-price-badge">
+                  ${analysis?.current_price ? analysis.current_price.toFixed(2) : '158.40'}
+                </div>
+                <span className={`type-badge ${analysis?.recommendation?.toLowerCase() || 'hold'}`}>
+                  {analysis?.recommendation_label || translateRec(analysis?.recommendation)} ({analysis?.confidence || 86}% Confidenza)
+                </span>
+                <div className="ticker-pills">
+                  {['NVDA', 'AAPL', 'MSFT', 'TSLA'].map((tk) => (
+                    <button
+                      key={tk}
+                      className={`ticker-pill ${selectedTicker === tk ? 'active' : ''}`}
+                      onClick={() => setSelectedTicker(tk)}
+                    >
+                      {tk}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button className="btn-close" onClick={() => setIsFullscreenChartOpen(false)} title="Chiudi (Esc)">
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="fullscreen-controls-bar">
+              <div className="scale-selector-bar">
+                {SCALE_OPTIONS.map((scale) => (
+                  <button
+                    key={scale}
+                    className={`scale-btn ${timeframe === scale ? 'active' : ''}`}
+                    onClick={() => setTimeframe(scale)}
+                  >
+                    {scale}
+                  </button>
+                ))}
+              </div>
+
+              <div className="chart-legend">
+                <div className="legend-item">
+                  <div className="legend-color" style={{ background: '#10b981' }}></div>
+                  <span>Storico Reale</span>
+                </div>
+                <div className="legend-item">
+                  <div className="legend-color" style={{ background: '#38bdf8' }}></div>
+                  <span>Candele Previste (Previsione AI)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="fullscreen-chart-area">
+              {loading ? (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                  <RefreshCw size={28} className="animate-spin" style={{ marginRight: '10px' }} /> Caricamento dati e calcolo previsione scala {timeframe}...
+                </div>
+              ) : (
+                <CombinedChart
+                  data={analysis?.historical_candles || []}
+                  predictions={analysis?.prediction_candles || []}
+                  height={window.innerHeight - 260}
+                />
+              )}
+            </div>
+
+            <div className="fullscreen-footer">
+              <div>
+                <span>Prezzo Obiettivo: <strong style={{ color: '#10b981' }}>${analysis?.target_price?.toFixed(2) || '171.00'}</strong></span>
+                <span style={{ margin: '0 12px' }}>•</span>
+                <span>Stop Loss: <strong style={{ color: '#ef4444' }}>${analysis?.stop_loss?.toFixed(2) || '148.50'}</strong></span>
+                <span style={{ margin: '0 12px' }}>•</span>
+                <span>Rapporto R/R: <strong style={{ color: '#f8fafc' }}>{analysis?.risk_reward_ratio || '1:2.4'}</strong></span>
+              </div>
+              <div>
+                <span>Pattern attivi nel grafico: <strong>{analysis?.active_patterns?.map(p => p.name).join(', ') || 'Nessuno rilevato'}</strong></span>
+              </div>
+            </div>
           </div>
         </div>
       )}

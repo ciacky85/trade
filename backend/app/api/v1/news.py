@@ -7,62 +7,62 @@ DEFAULT_NEWS = [
     {
         "id": "news-1",
         "ticker": "NVDA",
-        "title": "NVIDIA Blackwell Ultra GPU Demand Surges Across Hyperscalers and Sovereign AI",
+        "title": "La domanda per le GPU NVIDIA Blackwell Ultra registra un boom tra Hyperscaler e AI Sovrana",
         "source": "Bloomberg Technology",
         "published_at": (datetime.utcnow() - timedelta(hours=2)).isoformat(),
         "url": "https://bloomberg.com/news/articles/nvidia-blackwell-demand",
-        "sentiment_label": "BULLISH",
+        "sentiment_label": "RIALZISTA",
         "sentiment_score": 0.94,
-        "impact": "HIGH",
-        "summary": "Major cloud service providers report aggressive capital expenditure increases focused on next-generation NVIDIA accelerated computing clusters."
+        "impact": "ALTO",
+        "summary": "I principali cloud provider globali aumentano significativamente la spesa in conto capitale focalizzandosi sui cluster di calcolo accelerato NVIDIA di nuova generazione."
     },
     {
         "id": "news-2",
         "ticker": "NVDA",
-        "title": "AI Hardware Export Regulations Review Completed with No New Immediate Restrictions",
+        "title": "Revisione delle normative sulle esportazioni di hardware AI completata senza nuove restrizioni immediate",
         "source": "Reuters Financial",
         "published_at": (datetime.utcnow() - timedelta(hours=5)).isoformat(),
         "url": "https://reuters.com/technology/ai-export-regulations",
-        "sentiment_label": "BULLISH",
+        "sentiment_label": "RIALZISTA",
         "sentiment_score": 0.81,
-        "impact": "MEDIUM",
-        "summary": "Regulatory authorities signal stability in current high-bandwidth memory and computing export guidelines, alleviating short-term margin risks."
+        "impact": "MEDIO",
+        "summary": "Le autorità di regolamentazione confermano stabilità per le memorie ad alta larghezza di banda e chip grafici avanzati, allentando i timori a breve termine."
     },
     {
         "id": "news-3",
         "ticker": "AAPL",
-        "title": "Apple Intelligence Adoption Drives Strong iPhone Upgrade Cycle in Key Markets",
+        "title": "L'adozione di Apple Intelligence accelera il ciclo di aggiornamento degli iPhone nei mercati chiave",
         "source": "Wall Street Journal",
         "published_at": (datetime.utcnow() - timedelta(hours=8)).isoformat(),
         "url": "https://wsj.com/articles/apple-intelligence-sales",
-        "sentiment_label": "BULLISH",
+        "sentiment_label": "RIALZISTA",
         "sentiment_score": 0.76,
-        "impact": "MEDIUM",
-        "summary": "Analyst channel checks indicate higher average selling prices and stronger customer retention powered by on-device privacy-centric AI features."
+        "impact": "MEDIO",
+        "summary": "Le indagini di mercato evidenziano prezzi medi di vendita più elevati e forte fidelizzazione trainata dalle nuove funzionalità di intelligenza artificiale on-device."
     },
     {
         "id": "news-4",
         "ticker": "MSFT",
-        "title": "Azure AI Services Revenue Growth Tops 34% Year-over-Year",
+        "title": "I ricavi dei servizi Azure AI crescono del 34% su base annua superando le stime",
         "source": "CNBC TechCheck",
         "published_at": (datetime.utcnow() - timedelta(hours=14)).isoformat(),
         "url": "https://cnbc.com/tech/azure-ai-growth",
-        "sentiment_label": "BULLISH",
+        "sentiment_label": "RIALZISTA",
         "sentiment_score": 0.88,
-        "impact": "HIGH",
-        "summary": "Enterprise cloud migrations accelerate as Fortune 500 companies integrate multimodal generative models into core production software."
+        "impact": "ALTO",
+        "summary": "L'integrazione di modelli generativi multimodali nel software aziendale Fortune 500 spinge l'adozione dell'ecosistema Microsoft Azure a ritmi record."
     },
     {
         "id": "news-5",
         "ticker": "MACRO",
-        "title": "Federal Reserve Signals Accommodative Monetary Policy Supporting Tech Valuations",
+        "title": "La Federal Reserve segnala politica monetaria favorevole a supporto dei multipli tecnologici",
         "source": "Financial Times",
         "published_at": (datetime.utcnow() - timedelta(hours=20)).isoformat(),
         "url": "https://ft.com/macro-monetary-policy",
-        "sentiment_label": "BULLISH",
+        "sentiment_label": "RIALZISTA",
         "sentiment_score": 0.72,
-        "impact": "MEDIUM",
-        "summary": "Interest rate stabilization provides tailwind for growth and tech equities as cost of capital for massive infrastructure investments eases."
+        "impact": "MEDIO",
+        "summary": "La stabilizzazione dei tassi d'interesse riduce il costo del capitale per gli ingenti investimenti in infrastrutture di calcolo, sostenendo i mercati azionari tech."
     }
 ]
 

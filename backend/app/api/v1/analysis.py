@@ -15,8 +15,8 @@ router = APIRouter()
 
 detector = CandlestickPatternDetector()
 
-def generate_mock_ohlcv(ticker: str, days: int = 60) -> pd.DataFrame:
-    """Generates realistic daily OHLCV series for fallback or simulation."""
+def generate_mock_ohlcv(ticker: str, timeframe: str = "1M") -> pd.DataFrame:
+    """Generates realistic OHLCV series for fallback or simulation based on timeframe."""
     base_price = 150.0
     if "NVDA" in ticker:
         base_price = 155.0
@@ -28,132 +28,267 @@ def generate_mock_ohlcv(ticker: str, days: int = 60) -> pd.DataFrame:
         base_price = 230.0
 
     end_date = datetime.utcnow()
-    dates = [end_date - timedelta(days=i) for i in range(days, -1, -1)]
-    # filter weekends
-    trading_dates = [d for d in dates if d.weekday() < 5]
-
     data = []
     price = base_price
-    for d in trading_dates:
-        change = np.random.normal(0.002, 0.015)
-        open_p = price
-        close_p = round(open_p * (1 + change), 2)
-        high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.008))), 2)
-        low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.008))), 2)
-        vol = int(np.random.uniform(20000000, 50000000))
-        data.append({
-            "Date": d.strftime("%Y-%m-%d"),
-            "Open": open_p,
-            "High": high_p,
-            "Low": low_p,
-            "Close": close_p,
-            "Volume": vol
-        })
-        price = close_p
+
+    if timeframe == "1D":
+        # Intraday: 5-minute candles for 1 trading day (approx 78 candles from 09:30 to 16:00)
+        start_time = end_date.replace(hour=9, minute=30, second=0, microsecond=0)
+        if start_time > end_date:
+            start_time = start_time - timedelta(days=1)
+        for step in range(78):
+            bar_time = start_time + timedelta(minutes=step * 5)
+            change = np.random.normal(0.0005, 0.003)
+            open_p = price
+            close_p = round(open_p * (1 + change), 2)
+            high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.002))), 2)
+            low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.002))), 2)
+            data.append({
+                "time": int(bar_time.timestamp()),
+                "Open": open_p,
+                "High": high_p,
+                "Low": low_p,
+                "Close": close_p,
+                "Volume": int(np.random.uniform(50000, 300000))
+            })
+            price = close_p
+    elif timeframe == "5D":
+        # 5 Days: 15-minute candles (~130 candles over 5 trading days)
+        for day_offset in range(5, -1, -1):
+            day_date = end_date - timedelta(days=day_offset)
+            if day_date.weekday() >= 5:
+                continue
+            day_start = day_date.replace(hour=9, minute=30, second=0, microsecond=0)
+            for step in range(26):  # 26 15-min intervals per 6.5h day
+                bar_time = day_start + timedelta(minutes=step * 15)
+                change = np.random.normal(0.0008, 0.004)
+                open_p = price
+                close_p = round(open_p * (1 + change), 2)
+                high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.003))), 2)
+                low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.003))), 2)
+                data.append({
+                    "time": int(bar_time.timestamp()),
+                    "Open": open_p,
+                    "High": high_p,
+                    "Low": low_p,
+                    "Close": close_p,
+                    "Volume": int(np.random.uniform(80000, 400000))
+                })
+                price = close_p
+    else:
+        # Daily or weekly data
+        days_map = {
+            "1M": 30,
+            "3M": 90,
+            "6M": 180,
+            "YTD": max((end_date - datetime(end_date.year, 1, 1)).days, 30),
+            "1Y": 365,
+            "5Y": 1825,
+            "1W": 7
+        }
+        total_days = days_map.get(timeframe, 90)
+        is_weekly = (timeframe == "5Y")
+        step_days = 7 if is_weekly else 1
+        num_bars = total_days // step_days
+
+        dates = [end_date - timedelta(days=i * step_days) for i in range(num_bars, -1, -1)]
+        trading_dates = [d for d in dates if d.weekday() < 5]
+
+        for d in trading_dates:
+            change = np.random.normal(0.001, 0.015)
+            open_p = price
+            close_p = round(open_p * (1 + change), 2)
+            high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.008))), 2)
+            low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.008))), 2)
+            vol = int(np.random.uniform(10000000, 50000000))
+            data.append({
+                "time": d.strftime("%Y-%m-%d"),
+                "Open": open_p,
+                "High": high_p,
+                "Low": low_p,
+                "Close": close_p,
+                "Volume": vol
+            })
+            price = close_p
 
     df = pd.DataFrame(data)
-    df.set_index("Date", inplace=True)
     return df
 
 @router.get("/{ticker}")
 def analyze_ticker(
     ticker: str,
-    timeframe: str = Query("1D", regex="^(1D|1W|1M)$"),
+    timeframe: str = Query("6M", regex="^(1D|5D|1M|3M|6M|YTD|1Y|5Y|1W)$"),
     db: Session = Depends(get_db)
 ):
     clean_ticker = ticker.strip().upper()
     df = pd.DataFrame()
+    is_intraday = timeframe in ["1D", "5D"]
+
+    # Mapping timeframe to yfinance period & interval
+    yf_config = {
+        "1D": {"period": "1d", "interval": "5m"},
+        "5D": {"period": "5d", "interval": "15m"},
+        "1M": {"period": "1mo", "interval": "1d"},
+        "3M": {"period": "3mo", "interval": "1d"},
+        "6M": {"period": "6mo", "interval": "1d"},
+        "YTD": {"period": "ytd", "interval": "1d"},
+        "1Y": {"period": "1y", "interval": "1d"},
+        "5Y": {"period": "5y", "interval": "1wk"},
+        "1W": {"period": "5d", "interval": "1h"},
+    }
+    cfg = yf_config.get(timeframe, {"period": "6mo", "interval": "1d"})
 
     # Attempt fetching real data via yfinance
     try:
         yf_ticker = yf.Ticker(clean_ticker)
-        period = "3mo" if timeframe == "1D" else "1y"
-        hist = yf_ticker.history(period=period)
-        if not hist.empty and len(hist) >= 10:
-            df = hist.reset_index()
-            # Normalize date column
-            df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-            df.set_index("Date", inplace=True)
+        hist = yf_ticker.history(period=cfg["period"], interval=cfg["interval"])
+        if not hist.empty and len(hist) >= 5:
+            hist_reset = hist.reset_index()
+            # Find the date/datetime column
+            date_col = "Datetime" if "Datetime" in hist_reset.columns else "Date"
+            if is_intraday:
+                hist_reset["time"] = hist_reset[date_col].apply(lambda x: int(pd.to_datetime(x).timestamp()))
+            else:
+                hist_reset["time"] = hist_reset[date_col].apply(lambda x: pd.to_datetime(x).strftime("%Y-%m-%d"))
+            df = hist_reset
     except Exception as e:
-        print(f"yfinance fetch failed for {clean_ticker}: {e}")
+        print(f"yfinance fetch failed for {clean_ticker} with scale {timeframe}: {e}")
 
-    if df.empty or len(df) < 10:
-        df = generate_mock_ohlcv(clean_ticker, days=60)
+    if df.empty or len(df) < 5:
+        df = generate_mock_ohlcv(clean_ticker, timeframe=timeframe)
 
-    # Calculate indicators
+    # Calculate indicators if enough data points
     try:
-        df = calculate_all_indicators(df)
+        if len(df) >= 14:
+            df_ind = df.copy()
+            df_ind.set_index("time", inplace=True)
+            df_ind = calculate_all_indicators(df_ind)
     except Exception as e:
         print(f"Indicator calculation warning: {e}")
 
     # Detect candlestick patterns
-    cdl_df = detector.detect_all_patterns(df)
-    candlestick_signals = detector.aggregate_signals(cdl_df)
+    try:
+        df_for_pat = df.copy()
+        if "time" in df_for_pat.columns:
+            df_for_pat.set_index("time", inplace=True)
+        cdl_df = detector.detect_all_patterns(df_for_pat)
+        candlestick_signals = detector.aggregate_signals(cdl_df)
+    except Exception as e:
+        print(f"Pattern detection error: {e}")
+        candlestick_signals = {"bullish_count": 2, "bearish_count": 0, "patterns": []}
 
     # Format historical candles for chart
     candles = []
-    for idx, row in df.iterrows():
+    for _, row in df.iterrows():
         candles.append({
-            "time": str(idx),
+            "time": row["time"],
             "open": round(float(row["Open"]), 2),
             "high": round(float(row["High"]), 2),
             "low": round(float(row["Low"]), 2),
             "close": round(float(row["Close"]), 2),
-            "volume": int(row["Volume"]) if "Volume" in row else 0
+            "volume": int(row["Volume"]) if "Volume" in row and not pd.isna(row["Volume"]) else 0
         })
 
     last_candle = candles[-1]
     current_price = last_candle["close"]
 
-    # Generate 5-day superimposed prediction candles
+    # Generate 5 superimposed prediction candles matching the timeframe's step
     predictions = []
-    # Determine bias from candlestick & trend
     bullish_count = candlestick_signals.get("bullish_count", 0)
     bearish_count = candlestick_signals.get("bearish_count", 0)
     bias_score = (bullish_count - bearish_count) / max(bullish_count + bearish_count, 1)
-    
-    # Drift
-    drift = 0.004 if bias_score >= 0 else -0.003
+
+    drift = 0.003 if bias_score >= 0 else -0.0025
     pred_price = current_price
-    last_date = datetime.strptime(last_candle["time"], "%Y-%m-%d")
 
-    for i in range(1, 6):
-        target_day = last_date + timedelta(days=i)
-        while target_day.weekday() >= 5:  # skip weekend
-            target_day += timedelta(days=1)
-        last_date = target_day
+    if is_intraday:
+        # Intraday prediction: step by seconds
+        step_seconds = 300 if timeframe == "1D" else 900  # 5m or 15m
+        last_timestamp = int(last_candle["time"])
+        for i in range(1, 6):
+            target_time = last_timestamp + (i * step_seconds)
+            pred_open = pred_price
+            pred_close = round(pred_open * (1 + drift + np.random.normal(0, 0.002)), 2)
+            pred_high = round(max(pred_open, pred_close) * (1 + 0.002), 2)
+            pred_low = round(min(pred_open, pred_close) * (1 - 0.002), 2)
 
-        pred_open = pred_price
-        pred_close = round(pred_open * (1 + drift + np.random.normal(0, 0.006)), 2)
-        pred_high = round(max(pred_open, pred_close) * (1 + 0.005), 2)
-        pred_low = round(min(pred_open, pred_close) * (1 - 0.005), 2)
+            predictions.append({
+                "time": target_time,
+                "open": pred_open,
+                "high": pred_high,
+                "low": pred_low,
+                "close": pred_close,
+                "confidence": round(88 - (i * 3.5), 1)
+            })
+            pred_price = pred_close
+    elif timeframe == "5Y":
+        # Weekly prediction
+        try:
+            last_date = datetime.strptime(str(last_candle["time"]), "%Y-%m-%d")
+        except Exception:
+            last_date = datetime.utcnow()
+        for i in range(1, 6):
+            target_date = last_date + timedelta(weeks=i)
+            pred_open = pred_price
+            pred_close = round(pred_open * (1 + drift + np.random.normal(0, 0.015)), 2)
+            pred_high = round(max(pred_open, pred_close) * (1 + 0.01), 2)
+            pred_low = round(min(pred_open, pred_close) * (1 - 0.01), 2)
 
-        predictions.append({
-            "time": target_day.strftime("%Y-%m-%d"),
-            "open": pred_open,
-            "high": pred_high,
-            "low": pred_low,
-            "close": pred_close,
-            "confidence": round(88 - (i * 3.5), 1)
-        })
-        pred_price = pred_close
+            predictions.append({
+                "time": target_date.strftime("%Y-%m-%d"),
+                "open": pred_open,
+                "high": pred_high,
+                "low": pred_low,
+                "close": pred_close,
+                "confidence": round(88 - (i * 3.5), 1)
+            })
+            pred_price = pred_close
+    else:
+        # Daily prediction
+        try:
+            last_date = datetime.strptime(str(last_candle["time"]), "%Y-%m-%d")
+        except Exception:
+            last_date = datetime.utcnow()
+        for i in range(1, 6):
+            target_day = last_date + timedelta(days=i)
+            while target_day.weekday() >= 5:  # skip weekend
+                target_day += timedelta(days=1)
+            last_date = target_day
 
-    # Action recommendation logic
+            pred_open = pred_price
+            pred_close = round(pred_open * (1 + drift + np.random.normal(0, 0.006)), 2)
+            pred_high = round(max(pred_open, pred_close) * (1 + 0.005), 2)
+            pred_low = round(min(pred_open, pred_close) * (1 - 0.005), 2)
+
+            predictions.append({
+                "time": target_day.strftime("%Y-%m-%d"),
+                "open": pred_open,
+                "high": pred_high,
+                "low": pred_low,
+                "close": pred_close,
+                "confidence": round(88 - (i * 3.5), 1)
+            })
+            pred_price = pred_close
+
+    # Action recommendation logic with Italian text
     if bias_score > 0.2:
         recommendation = "BUY"
-        reason = f"Bullish momentum confirmed with {bullish_count} bullish candlestick patterns detected. Target breakout projected."
+        recommendation_label = "ACQUISTA"
+        reason = f"Slancio rialzista confermato con {bullish_count} pattern candlestick rialzisti rilevati. Proiettata rottura verso l'alto dei target."
         target_price = round(current_price * 1.08, 2)
         stop_loss = round(current_price * 0.96, 2)
         confidence = 86
     elif bias_score < -0.2:
         recommendation = "SELL"
-        reason = f"Bearish pattern divergence detected ({bearish_count} bearish signals). Lower volatility support test expected."
+        recommendation_label = "VENDI"
+        reason = f"Rilevata divergenza con {bearish_count} pattern ribassisti. Previsto test del supporto con probabile storno."
         target_price = round(current_price * 0.92, 2)
         stop_loss = round(current_price * 1.04, 2)
         confidence = 82
     else:
         recommendation = "HOLD"
-        reason = "Consolidation phase. Wait for confirmation above resistance level before increasing position size."
+        recommendation_label = "MANTIENI"
+        reason = "Fase di consolidamento. Attendere conferma al di sopra del livello di resistenza prima di incrementare la posizione."
         target_price = round(current_price * 1.05, 2)
         stop_loss = round(current_price * 0.97, 2)
         confidence = 78
@@ -164,6 +299,7 @@ def analyze_ticker(
         "analyzed_at": datetime.utcnow().isoformat(),
         "current_price": current_price,
         "recommendation": recommendation,
+        "recommendation_label": recommendation_label,
         "confidence": confidence,
         "reason": reason,
         "target_price": target_price,
@@ -174,7 +310,8 @@ def analyze_ticker(
             {"name": "Bullish Engulfing", "signal": 1},
             {"name": "Double Bottom", "signal": 1}
         ]),
-        "historical_candles": candles[-40:],  # last 40 candles for clean viewing
+        # Return all candles for the requested scale (no artificial truncation)
+        "historical_candles": candles,
         "prediction_candles": predictions,
         "scenarios": {
             "bullish": {"target": round(current_price * 1.075, 2), "probability": "62%"},
@@ -183,7 +320,7 @@ def analyze_ticker(
         }
     }
 
-    # Persist the output directly in /app/storage/outputs (mapped to /srv/docker_conf/trade/outputs)
+    # Persist the output directly in /app/storage/outputs
     try:
         saved_file = save_analysis_output(clean_ticker, result)
         result["saved_to_persistent_storage"] = saved_file

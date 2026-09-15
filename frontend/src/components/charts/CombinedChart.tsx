@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { createChart, CandlestickSeries, ColorType } from 'lightweight-charts';
+import { createChart, CandlestickSeries, ColorType, type IChartApi } from 'lightweight-charts';
 
-interface CandleData {
-  time: string;
+export interface CandleData {
+  time: string | number;
   open: number;
   high: number;
   low: number;
@@ -12,16 +12,21 @@ interface CandleData {
 interface ChartProps {
   data: CandleData[];
   predictions?: CandleData[];
+  height?: number;
 }
 
-export const CombinedChart = ({ data, predictions }: ChartProps) => {
+export const CombinedChart = ({ data, predictions, height = 380 }: ChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     // Clear previous elements if any
     chartContainerRef.current.innerHTML = '';
+
+    const initialHeight = chartContainerRef.current.clientHeight || height;
+    const initialWidth = chartContainerRef.current.clientWidth || 600;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -32,10 +37,11 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
         vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
         horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
       },
-      width: chartContainerRef.current.clientWidth || 600,
-      height: 380,
+      width: initialWidth,
+      height: initialHeight,
       timeScale: {
         timeVisible: true,
+        secondsVisible: false,
         borderColor: 'rgba(255, 255, 255, 0.1)',
       },
       rightPriceScale: {
@@ -43,7 +49,9 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
       }
     });
 
-    // Historical candles series
+    chartRef.current = chart;
+
+    // Historical candles series (Green / Red)
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -60,7 +68,7 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
     ];
     candlestickSeries.setData(candleData as any);
 
-    // Prediction series (rendered with distinctive futuristic cyan color)
+    // Prediction series (Futuristic Cyan)
     const predSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#38bdf8',
       downColor: '#0284c7',
@@ -79,18 +87,41 @@ export const CombinedChart = ({ data, predictions }: ChartProps) => {
     chart.timeScale().fitContent();
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chartContainerRef.current && chart) {
+        const newWidth = chartContainerRef.current.clientWidth;
+        const newHeight = chartContainerRef.current.clientHeight || height;
+        chart.applyOptions({ width: newWidth, height: newHeight });
+        chart.timeScale().fitContent();
       }
     };
 
     window.addEventListener('resize', handleResize);
 
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.remove();
+      chartRef.current = null;
     };
-  }, [data, predictions]);
+  }, [data, predictions, height]);
 
-  return <div ref={chartContainerRef} style={{ width: '100%', height: '380px' }} />;
+  return (
+    <div
+      ref={chartContainerRef}
+      style={{
+        width: '100%',
+        height: typeof height === 'number' ? `${height}px` : height,
+        position: 'relative',
+        minHeight: '200px'
+      }}
+    />
+  );
 };
+
