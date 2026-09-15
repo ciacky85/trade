@@ -261,28 +261,38 @@ export const DashboardLayout = () => {
   const handleDeletePosition = async (ticker: string) => {
     if (!confirm(`Sei sicuro di voler eliminare l'azione ${ticker} dal portafoglio e tutte le sue transazioni registrate?`)) return;
     try {
-      const res = await fetch(`/api/v1/portfolios/positions/${ticker}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/portfolios/positions/${encodeURIComponent(ticker)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => null);
       if (res.ok) {
         showToast(`Azione ${ticker} rimossa dal portafoglio!`);
         await fetchPortfolio();
         await fetchTransactions();
       } else {
-        const err = await res.json();
-        alert(`Errore: ${err.detail || 'Impossibile eliminare l\'azione'}`);
+        alert(`Errore: ${data?.detail || 'Impossibile eliminare l\'azione'}`);
       }
     } catch (e) {
       console.error(e);
-      alert('Errore di connessione al server');
+      alert('Errore di comunicazione con il server');
     }
   };
 
-  const handleStockSearchInput = async (val: string) => {
-    setStockSearchQuery(val);
-    if (val.trim().length >= 1) {
+  // Debounced search effect for real stock catalog & live Yahoo search
+  useEffect(() => {
+    if (!stockSearchQuery || stockSearchQuery.includes('—')) {
+      return;
+    }
+    const clean = stockSearchQuery.trim();
+    if (clean.length < 1) {
+      setStockSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
       setIsSearchingStocks(true);
       setShowSuggestions(true);
       try {
-        const res = await fetch(`/api/v1/system/search-stocks?query=${encodeURIComponent(val.trim())}`);
+        const res = await fetch(`/api/v1/system/search-stocks?query=${encodeURIComponent(clean)}`);
         if (res.ok) {
           const data = await res.json();
           setStockSuggestions(data);
@@ -292,9 +302,18 @@ export const DashboardLayout = () => {
       } finally {
         setIsSearchingStocks(false);
       }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [stockSearchQuery]);
+
+  const handleStockSearchInput = (val: string) => {
+    setStockSearchQuery(val);
+    if (val.trim().length >= 1) {
+      setShowSuggestions(true);
     } else {
-      setStockSuggestions([]);
       setShowSuggestions(false);
+      setStockSuggestions([]);
     }
   };
 
@@ -588,7 +607,7 @@ export const DashboardLayout = () => {
 
         <div className="sidebar-footer">
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Docker Server</span>
-          <div className="version-badge">v0.1.0</div>
+          <div className="version-badge">v0.3.0</div>
         </div>
       </aside>
 
@@ -1231,7 +1250,7 @@ export const DashboardLayout = () => {
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 news_cache/ (cache articoli & sentiment)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 postgres_data/ (database PostgreSQL persistente)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 redis_data/ (cache e broker Celery)</div>
-                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.1.0)</div>
+                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.3.0)</div>
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
@@ -1246,7 +1265,7 @@ export const DashboardLayout = () => {
 
       {/* Modal: Nuova Transazione */}
       {isTxModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsTxModalOpen(false)}>
+        <div className="modal-overlay">
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Registra Nuova Transazione</h2>
@@ -1267,6 +1286,11 @@ export const DashboardLayout = () => {
                       placeholder="Cerca per ticker o nome (es. NVDA, Apple, Eni, Tesla, Ferrari...)"
                       value={stockSearchQuery}
                       onChange={(e) => handleStockSearchInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                        }
+                      }}
                       onFocus={() => {
                         if (stockSuggestions.length > 0) setShowSuggestions(true);
                       }}
@@ -1280,9 +1304,9 @@ export const DashboardLayout = () => {
 
                   {showSuggestions && stockSuggestions.length > 0 && (
                     <div className="autocomplete-dropdown">
-                      {stockSuggestions.map((s) => (
+                      {stockSuggestions.map((s, idx) => (
                         <div
-                          key={`${s.ticker}-${s.exchange}`}
+                          key={`${s.ticker}-${s.exchange || ''}-${idx}`}
                           className="autocomplete-item"
                           onClick={() => handleSelectStock(s)}
                         >

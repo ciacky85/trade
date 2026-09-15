@@ -123,21 +123,51 @@ def delete_portfolio_position(ticker: str, db: Session = Depends(get_db)):
     Deletes all transactions and the associated stock position for the specified ticker.
     """
     clean_ticker = ticker.strip().upper()
-    stock = db.query(models.Stock).filter(models.Stock.ticker == clean_ticker).first()
-    if not stock:
-        raise HTTPException(status_code=404, detail=f"Azione {clean_ticker} non trovata nel database")
+    try:
+        stocks = db.query(models.Stock).filter(models.Stock.ticker == clean_ticker).all()
+        if not stocks:
+            # Case-insensitive fallback
+            stocks = db.query(models.Stock).filter(models.Stock.ticker.ilike(clean_ticker)).all()
 
-    # Delete transactions for this stock
-    deleted_count = db.query(models.Transaction).filter(models.Transaction.stock_id == stock.id).delete()
-    # Delete the stock entry if no other relations
-    db.delete(stock)
-    db.commit()
+        deleted_tx_count = 0
+        stock_ids = [s.id for s in stocks]
 
-    return {
-        "status": "success",
-        "message": f"Azione {clean_ticker} e relative {deleted_count} transazioni eliminate con successo",
-        "ticker": clean_ticker
-    }
+        if stock_ids:
+            # Delete transactions for these stocks
+            deleted_tx_count = db.query(models.Transaction).filter(models.Transaction.stock_id.in_(stock_ids)).delete(synchronize_session=False)
+
+            # Safely clean up associated entities
+            try:
+                db.query(models.ChartSource).filter(models.ChartSource.stock_id.in_(stock_ids)).delete(synchronize_session=False)
+            except Exception:
+                pass
+            try:
+                db.query(models.News).filter(models.News.stock_id.in_(stock_ids)).delete(synchronize_session=False)
+            except Exception:
+                pass
+            try:
+                db.query(models.Analysis).filter(models.Analysis.stock_id.in_(stock_ids)).delete(synchronize_session=False)
+            except Exception:
+                pass
+
+            for s in stocks:
+                try:
+                    db.delete(s)
+                except Exception:
+                    pass
+
+        db.commit()
+
+        return {
+            "status": "success",
+            "message": f"Azione {clean_ticker} rimossa con successo dal portafoglio ({deleted_tx_count} transazioni eliminate)",
+            "ticker": clean_ticker,
+            "deleted_transactions": deleted_tx_count
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"Errore durante l'eliminazione della posizione {clean_ticker}: {e}")
+        raise HTTPException(status_code=500, detail=f"Errore durante l'eliminazione: {str(e)}")
 
 @router.get("/{portfolio_id}", response_model=schemas.Portfolio)
 def get_portfolio(portfolio_id: str, db: Session = Depends(get_db)):

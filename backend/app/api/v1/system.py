@@ -34,7 +34,7 @@ POPULAR_STOCKS = [
 def get_system_status():
     storage_info = get_storage_status()
     return {
-        "version": "v0.1.0",
+        "version": "v0.3.0",
         "app_name": "TradeAnalyzer Pro",
         "database": "connected",
         "storage": storage_info,
