@@ -12,10 +12,16 @@ export interface CandleData {
 interface ChartProps {
   data: CandleData[];
   predictions?: CandleData[];
+  showPredictions?: boolean;
   height?: number;
 }
 
-export const CombinedChart = ({ data, predictions, height = 380 }: ChartProps) => {
+export const CombinedChart = ({
+  data,
+  predictions,
+  showPredictions = true,
+  height = 380
+}: ChartProps) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
 
@@ -68,21 +74,18 @@ export const CombinedChart = ({ data, predictions, height = 380 }: ChartProps) =
     ];
     candlestickSeries.setData(candleData as any);
 
-    // Prediction series (Futuristic Cyan)
-    const predSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#38bdf8',
-      downColor: '#0284c7',
-      borderVisible: true,
-      borderColor: '#38bdf8',
-      wickUpColor: '#38bdf8',
-      wickDownColor: '#0284c7',
-    });
-
-    const predData = (predictions && predictions.length > 0) ? predictions : [
-      { time: '2026-09-05', open: 159, high: 162, low: 158, close: 161 },
-      { time: '2026-09-06', open: 161, high: 165, low: 160, close: 164 },
-    ];
-    predSeries.setData(predData as any);
+    // Prediction series (Futuristic Cyan) - rendered only if showPredictions is enabled and data exists
+    if (showPredictions && predictions && predictions.length > 0) {
+      const predSeries = chart.addSeries(CandlestickSeries, {
+        upColor: '#38bdf8',
+        downColor: '#0284c7',
+        borderVisible: true,
+        borderColor: '#38bdf8',
+        wickUpColor: '#38bdf8',
+        wickDownColor: '#0284c7',
+      });
+      predSeries.setData(predictions as any);
+    }
 
     chart.timeScale().fitContent();
 
@@ -110,7 +113,7 @@ export const CombinedChart = ({ data, predictions, height = 380 }: ChartProps) =
       chart.remove();
       chartRef.current = null;
     };
-  }, [data, predictions, height]);
+  }, [data, predictions, showPredictions, height]);
 
   return (
     <div

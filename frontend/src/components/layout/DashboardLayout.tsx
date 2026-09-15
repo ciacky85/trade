@@ -14,6 +14,8 @@ import {
   RefreshCw,
   CheckCircle2,
   Maximize2,
+  Eye,
+  EyeOff,
   X
 } from 'lucide-react';
 import { CombinedChart } from '../charts/CombinedChart';
@@ -133,6 +135,7 @@ export const DashboardLayout = () => {
   const [selectedTicker, setSelectedTicker] = useState('NVDA');
   const [searchTicker, setSearchTicker] = useState('');
   const [timeframe, setTimeframe] = useState('6M');
+  const [showPredictions, setShowPredictions] = useState(true);
   const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState(false);
 
   // Modals & form state
@@ -559,11 +562,26 @@ export const DashboardLayout = () => {
                         <div className="legend-color" style={{ background: '#10b981' }}></div>
                         <span>Storico Reale</span>
                       </div>
-                      <div className="legend-item">
-                        <div className="legend-color" style={{ background: '#38bdf8' }}></div>
-                        <span>Candele Previste (Previsione AI)</span>
+                      <div
+                        className="legend-item interactive"
+                        onClick={() => setShowPredictions(!showPredictions)}
+                        title="Clicca per mostrare/nascondere le candele di previsione"
+                      >
+                        <div className="legend-color" style={{ background: showPredictions ? '#38bdf8' : '#64748b' }}></div>
+                        <span style={{ textDecoration: showPredictions ? 'none' : 'line-through', color: showPredictions ? '#38bdf8' : '#64748b' }}>
+                          Candele Previste (Previsione AI)
+                        </span>
                       </div>
                     </div>
+
+                    <button
+                      className={`btn-toggle-pred ${showPredictions ? 'active' : ''}`}
+                      onClick={() => setShowPredictions(!showPredictions)}
+                      title={showPredictions ? "Disattiva candele di previsione" : "Attiva candele di previsione"}
+                    >
+                      {showPredictions ? <Eye size={15} /> : <EyeOff size={15} />}
+                      Previsioni AI: {showPredictions ? 'ON' : 'OFF'}
+                    </button>
 
                     <div className="scale-selector-bar">
                       {SCALE_OPTIONS.map((scale) => (
@@ -596,6 +614,7 @@ export const DashboardLayout = () => {
                     <CombinedChart
                       data={analysis?.historical_candles || []}
                       predictions={analysis?.prediction_candles || []}
+                      showPredictions={showPredictions}
                       height={380}
                     />
                   )}
@@ -1168,11 +1187,26 @@ export const DashboardLayout = () => {
                   <div className="legend-color" style={{ background: '#10b981' }}></div>
                   <span>Storico Reale</span>
                 </div>
-                <div className="legend-item">
-                  <div className="legend-color" style={{ background: '#38bdf8' }}></div>
-                  <span>Candele Previste (Previsione AI)</span>
+                <div
+                  className="legend-item interactive"
+                  onClick={() => setShowPredictions(!showPredictions)}
+                  title="Clicca per mostrare/nascondere le candele di previsione"
+                >
+                  <div className="legend-color" style={{ background: showPredictions ? '#38bdf8' : '#64748b' }}></div>
+                  <span style={{ textDecoration: showPredictions ? 'none' : 'line-through', color: showPredictions ? '#38bdf8' : '#64748b' }}>
+                    Candele Previste (Previsione AI)
+                  </span>
                 </div>
               </div>
+
+              <button
+                className={`btn-toggle-pred ${showPredictions ? 'active' : ''}`}
+                onClick={() => setShowPredictions(!showPredictions)}
+                title={showPredictions ? "Disattiva candele di previsione" : "Attiva candele di previsione"}
+              >
+                {showPredictions ? <Eye size={15} /> : <EyeOff size={15} />}
+                Previsioni AI: {showPredictions ? 'ON' : 'OFF'}
+              </button>
             </div>
 
             <div className="fullscreen-chart-area">
@@ -1184,6 +1218,7 @@ export const DashboardLayout = () => {
                 <CombinedChart
                   data={analysis?.historical_candles || []}
                   predictions={analysis?.prediction_candles || []}
+                  showPredictions={showPredictions}
                   height={window.innerHeight - 260}
                 />
               )}

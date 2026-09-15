@@ -32,47 +32,48 @@ def generate_mock_ohlcv(ticker: str, timeframe: str = "1M") -> pd.DataFrame:
     price = base_price
 
     if timeframe == "1D":
-        # Intraday: 5-minute candles for 1 trading day (approx 78 candles from 09:30 to 16:00)
-        start_time = end_date.replace(hour=9, minute=30, second=0, microsecond=0)
+        # Intraday: 5-minute candles including Pre-Market (from 04:00) and After-Hours (up to 20:00 EST)
+        start_time = end_date.replace(hour=4, minute=0, second=0, microsecond=0)
         if start_time > end_date:
             start_time = start_time - timedelta(days=1)
-        for step in range(78):
+        # Up to 192 5-min intervals covering 04:00 to 20:00
+        for step in range(192):
             bar_time = start_time + timedelta(minutes=step * 5)
-            change = np.random.normal(0.0005, 0.003)
+            change = np.random.normal(0.0003, 0.0025)
             open_p = price
             close_p = round(open_p * (1 + change), 2)
-            high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.002))), 2)
-            low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.002))), 2)
+            high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.0015))), 2)
+            low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.0015))), 2)
             data.append({
                 "time": int(bar_time.timestamp()),
                 "Open": open_p,
                 "High": high_p,
                 "Low": low_p,
                 "Close": close_p,
-                "Volume": int(np.random.uniform(50000, 300000))
+                "Volume": int(np.random.uniform(20000, 250000))
             })
             price = close_p
     elif timeframe == "5D":
-        # 5 Days: 15-minute candles (~130 candles over 5 trading days)
+        # 5 Days: 15-minute candles including extended hours (04:00 to 20:00 EST = 64 bars/day)
         for day_offset in range(5, -1, -1):
             day_date = end_date - timedelta(days=day_offset)
             if day_date.weekday() >= 5:
                 continue
-            day_start = day_date.replace(hour=9, minute=30, second=0, microsecond=0)
-            for step in range(26):  # 26 15-min intervals per 6.5h day
+            day_start = day_date.replace(hour=4, minute=0, second=0, microsecond=0)
+            for step in range(64):  # 64 15-min intervals per 16h day
                 bar_time = day_start + timedelta(minutes=step * 15)
-                change = np.random.normal(0.0008, 0.004)
+                change = np.random.normal(0.0005, 0.003)
                 open_p = price
                 close_p = round(open_p * (1 + change), 2)
-                high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.003))), 2)
-                low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.003))), 2)
+                high_p = round(max(open_p, close_p) * (1 + abs(np.random.normal(0, 0.002))), 2)
+                low_p = round(min(open_p, close_p) * (1 - abs(np.random.normal(0, 0.002))), 2)
                 data.append({
                     "time": int(bar_time.timestamp()),
                     "Open": open_p,
                     "High": high_p,
                     "Low": low_p,
                     "Close": close_p,
-                    "Volume": int(np.random.uniform(80000, 400000))
+                    "Volume": int(np.random.uniform(30000, 350000))
                 })
                 price = close_p
     else:
@@ -138,10 +139,11 @@ def analyze_ticker(
     }
     cfg = yf_config.get(timeframe, {"period": "6mo", "interval": "1d"})
 
-    # Attempt fetching real data via yfinance
+    # Attempt fetching real data via yfinance (with extended hours prepost=True)
+    yf_ticker = None
     try:
         yf_ticker = yf.Ticker(clean_ticker)
-        hist = yf_ticker.history(period=cfg["period"], interval=cfg["interval"])
+        hist = yf_ticker.history(period=cfg["period"], interval=cfg["interval"], prepost=True)
         if not hist.empty and len(hist) >= 5:
             hist_reset = hist.reset_index()
             # Find the date/datetime column
@@ -191,6 +193,19 @@ def analyze_ticker(
 
     last_candle = candles[-1]
     current_price = last_candle["close"]
+
+    # Incorporate real-time / after-hours price if available via fast_info
+    if yf_ticker is not None:
+        try:
+            fast_price = getattr(yf_ticker.fast_info, 'last_price', None)
+            if fast_price and float(fast_price) > 0 and not pd.isna(fast_price):
+                current_price = round(float(fast_price), 2)
+                if candles:
+                    candles[-1]["close"] = current_price
+                    candles[-1]["high"] = max(candles[-1]["high"], current_price)
+                    candles[-1]["low"] = min(candles[-1]["low"], current_price)
+        except Exception:
+            pass
 
     # Generate 5 superimposed prediction candles matching the timeframe's step
     predictions = []
