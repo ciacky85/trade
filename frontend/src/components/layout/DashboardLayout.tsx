@@ -132,7 +132,7 @@ interface AnalysisData {
 
 export const DashboardLayout = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'portfolio' | 'analysis' | 'knowledge' | 'news' | 'settings'>('dashboard');
-  const [selectedTicker, setSelectedTicker] = useState('NVDA');
+  const [selectedTicker, setSelectedTicker] = useState('');
   const [searchTicker, setSearchTicker] = useState('');
   const [timeframe, setTimeframe] = useState('6M');
   const [showPredictions, setShowPredictions] = useState(true);
@@ -149,6 +149,12 @@ export const DashboardLayout = () => {
     fees: 0,
     notes: ''
   });
+
+  // Autocomplete stock search state
+  const [stockSearchQuery, setStockSearchQuery] = useState('');
+  const [stockSuggestions, setStockSuggestions] = useState<Array<{ ticker: string; company_name: string; exchange: string }>>([]);
+  const [isSearchingStocks, setIsSearchingStocks] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Chart source input
   const [chartSourceUrl, setChartSourceUrl] = useState('');
@@ -192,7 +198,11 @@ export const DashboardLayout = () => {
   }, []);
 
   useEffect(() => {
-    fetchAnalysis(selectedTicker, timeframe);
+    if (selectedTicker) {
+      fetchAnalysis(selectedTicker, timeframe);
+    } else {
+      setAnalysis(null);
+    }
   }, [selectedTicker, timeframe]);
 
   const fetchPortfolio = async () => {
@@ -201,10 +211,97 @@ export const DashboardLayout = () => {
       if (res.ok) {
         const data = await res.json();
         setPortfolio(data);
+        if (data.positions && data.positions.length > 0) {
+          // If no ticker selected or current ticker not in portfolio, default to first registered stock
+          if (!selectedTicker || !data.positions.some((p: Position) => p.ticker === selectedTicker)) {
+            setSelectedTicker(data.positions[0].ticker);
+          }
+        } else {
+          setSelectedTicker('');
+          setAnalysis(null);
+        }
       }
     } catch (e) {
       console.error('Error fetching portfolio:', e);
     }
+  };
+
+  const handleDeletePosition = async (ticker: string) => {
+    if (!confirm(`Sei sicuro di voler eliminare l'azione ${ticker} dal portafoglio e tutte le sue transazioni registrate?`)) return;
+    try {
+      const res = await fetch(`/api/v1/portfolios/positions/${ticker}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast(`Azione ${ticker} rimossa dal portafoglio!`);
+        await fetchPortfolio();
+        await fetchTransactions();
+      } else {
+        const err = await res.json();
+        alert(`Errore: ${err.detail || 'Impossibile eliminare l\'azione'}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Errore di connessione al server');
+    }
+  };
+
+  const handleStockSearchInput = async (val: string) => {
+    setStockSearchQuery(val);
+    if (val.trim().length >= 1) {
+      setIsSearchingStocks(true);
+      setShowSuggestions(true);
+      try {
+        const res = await fetch(`/api/v1/system/search-stocks?query=${encodeURIComponent(val.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          setStockSuggestions(data);
+        }
+      } catch (e) {
+        console.error('Stock search error:', e);
+      } finally {
+        setIsSearchingStocks(false);
+      }
+    } else {
+      setStockSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectStock = async (stock: { ticker: string; company_name: string; exchange: string }) => {
+    setTxFormData(prev => ({
+      ...prev,
+      ticker: stock.ticker,
+      company_name: stock.company_name
+    }));
+    setStockSearchQuery(`${stock.ticker} — ${stock.company_name}`);
+    setShowSuggestions(false);
+
+    try {
+      const res = await fetch(`/api/v1/system/quote/${stock.ticker}`);
+      if (res.ok) {
+        const quote = await res.json();
+        if (quote.price && quote.price > 0) {
+          setTxFormData(prev => ({ ...prev, price: quote.price }));
+        }
+      }
+    } catch (e) {
+      console.error('Quote fetch error:', e);
+    }
+  };
+
+  const openNewTransactionModal = () => {
+    setTxFormData({
+      ticker: '',
+      company_name: '',
+      type: 'BUY',
+      quantity: 1,
+      price: 0,
+      fees: 0,
+      notes: ''
+    });
+    setStockSearchQuery('');
+    setStockSuggestions([]);
+    setShowSuggestions(false);
+    setIsTxModalOpen(true);
   };
 
   const fetchTransactions = async () => {
@@ -243,9 +340,10 @@ export const DashboardLayout = () => {
     }
   };
 
-  const fetchNews = async () => {
+  const fetchNews = async (ticker?: string) => {
     try {
-      const res = await fetch('/api/v1/news/');
+      const url = ticker ? `/api/v1/news/?ticker=${encodeURIComponent(ticker)}` : '/api/v1/news/';
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setNews(data);
@@ -530,9 +628,9 @@ export const DashboardLayout = () => {
                 </div>
 
                 <div className="stat-card">
-                  <h3>Prezzo Attuale {selectedTicker}</h3>
+                  <h3>Prezzo Attuale {selectedTicker || '—'}</h3>
                   <div className="stat-value" style={{ color: '#f8fafc' }}>
-                    ${analysis?.current_price ? analysis.current_price.toFixed(2) : '158.40'}
+                    ${analysis?.current_price ? analysis.current_price.toFixed(2) : '0.00'}
                   </div>
                   <div className="stat-change positive">Rapporto R/R: {analysis?.risk_reward_ratio || '1:2.4'}</div>
                 </div>
@@ -542,18 +640,22 @@ export const DashboardLayout = () => {
               <div className="chart-section">
                 <div className="chart-header">
                   <div className="chart-title-area">
-                    <h2 style={{ margin: 0 }}>{selectedTicker} — Grafico & Previsione Sovrapposta</h2>
-                    <div className="ticker-pills">
-                      {['NVDA', 'AAPL', 'MSFT', 'TSLA'].map((tk) => (
-                        <button
-                          key={tk}
-                          className={`ticker-pill ${selectedTicker === tk ? 'active' : ''}`}
-                          onClick={() => setSelectedTicker(tk)}
-                        >
-                          {tk}
-                        </button>
-                      ))}
-                    </div>
+                    <h2 style={{ margin: 0 }}>
+                      {selectedTicker ? `${selectedTicker} — Grafico & Previsione Sovrapposta` : 'Grafico Titolo'}
+                    </h2>
+                    {portfolio?.positions && portfolio.positions.length > 0 ? (
+                      <div className="ticker-pills">
+                        {portfolio.positions.map((p) => (
+                          <button
+                            key={p.ticker}
+                            className={`ticker-pill ${selectedTicker === p.ticker ? 'active' : ''}`}
+                            onClick={() => setSelectedTicker(p.ticker)}
+                          >
+                            {p.ticker}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
@@ -595,18 +697,28 @@ export const DashboardLayout = () => {
                       ))}
                     </div>
 
-                    <button
-                      className="btn-maximize"
-                      title="Ingrandisci a tutto schermo"
-                      onClick={() => setIsFullscreenChartOpen(true)}
-                    >
-                      <Maximize2 size={16} /> Schermo Intero
-                    </button>
+                    {selectedTicker && (
+                      <button
+                        className="btn-maximize"
+                        title="Ingrandisci a tutto schermo"
+                        onClick={() => setIsFullscreenChartOpen(true)}
+                      >
+                        <Maximize2 size={16} /> Schermo Intero
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <div className="chart-container-inner">
-                  {loading ? (
+                  {!portfolio?.positions || portfolio.positions.length === 0 ? (
+                    <div style={{ height: '380px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', color: '#94a3b8', padding: '2rem', textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc' }}>Non hai ancora registrato alcuna azione nel tuo portafoglio.</p>
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8' }}>Registra una nuova azione per visualizzare il relativo grafico con dati storici, candele previste e analisi tecnica.</p>
+                      <button className="btn-primary" onClick={openNewTransactionModal}>
+                        <PlusCircle size={18} /> Registra Azione nel Portafoglio
+                      </button>
+                    </div>
+                  ) : loading ? (
                     <div style={{ height: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
                       <RefreshCw size={24} className="animate-spin" style={{ marginRight: '8px' }} /> Caricamento dati e calcolo previsione scala {timeframe}...
                     </div>
@@ -673,7 +785,7 @@ export const DashboardLayout = () => {
                   <h1>Portafoglio & Transazioni</h1>
                   <p>Registro di tutte le azioni acquistate, quote, prezzi medi e cronologia esecuzioni.</p>
                 </div>
-                <button className="btn-primary" onClick={() => setIsTxModalOpen(true)}>
+                <button className="btn-primary" onClick={openNewTransactionModal}>
                   <PlusCircle size={18} /> Nuova Transazione
                 </button>
               </div>
@@ -709,13 +821,22 @@ export const DashboardLayout = () => {
                               {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
                             </td>
                             <td>
-                              <button
-                                className="btn-secondary"
-                                style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
-                                onClick={() => { setSelectedTicker(pos.ticker); setActiveTab('dashboard'); }}
-                              >
-                                Analizza
-                              </button>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                  className="btn-secondary"
+                                  style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                                  onClick={() => { setSelectedTicker(pos.ticker); setActiveTab('dashboard'); }}
+                                >
+                                  Analizza
+                                </button>
+                                <button
+                                  className="btn-delete-action"
+                                  title={`Elimina ${pos.ticker} dal portafoglio`}
+                                  onClick={() => handleDeletePosition(pos.ticker)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -1040,8 +1161,46 @@ export const DashboardLayout = () => {
 
             <form onSubmit={handleCreateTransaction}>
               <div className="form-grid">
+                {/* Autocomplete Real Stock Search */}
+                <div className="form-group full-width autocomplete-container">
+                  <label>Cerca e Seleziona Azione Reale *</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Cerca per ticker o nome (es. NVDA, Apple, Eni, Tesla, Ferrari...)"
+                      value={stockSearchQuery}
+                      onChange={(e) => handleStockSearchInput(e.target.value)}
+                      onFocus={() => {
+                        if (stockSuggestions.length > 0) setShowSuggestions(true);
+                      }}
+                    />
+                    {isSearchingStocks && (
+                      <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                        <RefreshCw size={16} className="animate-spin" style={{ color: '#94a3b8' }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {showSuggestions && stockSuggestions.length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {stockSuggestions.map((s) => (
+                        <div
+                          key={`${s.ticker}-${s.exchange}`}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectStock(s)}
+                        >
+                          <span className="autocomplete-ticker">{s.ticker}</span>
+                          <span className="autocomplete-name">{s.company_name}</span>
+                          <span className="autocomplete-exchange">{s.exchange}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="form-group">
-                  <label>Ticker Titolo *</label>
+                  <label>Ticker Selezionato *</label>
                   <input
                     type="text"
                     required
@@ -1152,15 +1311,17 @@ export const DashboardLayout = () => {
                   {analysis?.recommendation_label || translateRec(analysis?.recommendation)} ({analysis?.confidence || 86}% Confidenza)
                 </span>
                 <div className="ticker-pills">
-                  {['NVDA', 'AAPL', 'MSFT', 'TSLA'].map((tk) => (
-                    <button
-                      key={tk}
-                      className={`ticker-pill ${selectedTicker === tk ? 'active' : ''}`}
-                      onClick={() => setSelectedTicker(tk)}
-                    >
-                      {tk}
-                    </button>
-                  ))}
+                  {portfolio?.positions && portfolio.positions.length > 0 ? (
+                    portfolio.positions.map((p) => (
+                      <button
+                        key={p.ticker}
+                        className={`ticker-pill ${selectedTicker === p.ticker ? 'active' : ''}`}
+                        onClick={() => setSelectedTicker(p.ticker)}
+                      >
+                        {p.ticker}
+                      </button>
+                    ))
+                  ) : null}
                 </div>
               </div>
 

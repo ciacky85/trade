@@ -103,46 +103,6 @@ def get_portfolio_summary(db: Session = Depends(get_db)):
             "trades_count": data["trades_count"]
         })
 
-    # If no transactions exist yet, provide a demo baseline portfolio
-    if not active_positions:
-        active_positions = [
-            {
-                "ticker": "NVDA",
-                "company_name": "NVIDIA Corporation",
-                "quantity": 150,
-                "avg_buy_price": 142.50,
-                "current_price": 158.40,
-                "total_value": 23760.00,
-                "pnl": 2385.00,
-                "pnl_pct": 11.16,
-                "trades_count": 2
-            },
-            {
-                "ticker": "AAPL",
-                "company_name": "Apple Inc.",
-                "quantity": 80,
-                "avg_buy_price": 215.00,
-                "current_price": 224.20,
-                "total_value": 17936.00,
-                "pnl": 736.00,
-                "pnl_pct": 4.28,
-                "trades_count": 1
-            },
-            {
-                "ticker": "MSFT",
-                "company_name": "Microsoft Corporation",
-                "quantity": 50,
-                "avg_buy_price": 420.00,
-                "current_price": 448.10,
-                "total_value": 22405.00,
-                "pnl": 1405.00,
-                "pnl_pct": 6.69,
-                "trades_count": 1
-            }
-        ]
-        total_current_value = sum(p["total_value"] for p in active_positions)
-        total_cost_basis = sum(p["quantity"] * p["avg_buy_price"] for p in active_positions)
-
     total_pnl = round(total_current_value - total_cost_basis, 2)
     total_pnl_pct = round((total_pnl / total_cost_basis * 100) if total_cost_basis > 0 else 0.0, 2)
 
@@ -152,9 +112,31 @@ def get_portfolio_summary(db: Session = Depends(get_db)):
         "total_pnl": total_pnl,
         "total_pnl_pct": total_pnl_pct,
         "active_positions_count": len(active_positions),
-        "ai_consensus": "BULLISH" if total_pnl >= 0 else "NEUTRAL",
-        "confidence_score": 87,
+        "ai_consensus": "RIALZISTA" if total_pnl >= 0 else "RIBASSISTA" if total_pnl < -500 else "NEUTRO",
+        "confidence_score": 85 if len(active_positions) > 0 else 0,
         "positions": active_positions
+    }
+
+@router.delete("/positions/{ticker}")
+def delete_portfolio_position(ticker: str, db: Session = Depends(get_db)):
+    """
+    Deletes all transactions and the associated stock position for the specified ticker.
+    """
+    clean_ticker = ticker.strip().upper()
+    stock = db.query(models.Stock).filter(models.Stock.ticker == clean_ticker).first()
+    if not stock:
+        raise HTTPException(status_code=404, detail=f"Azione {clean_ticker} non trovata nel database")
+
+    # Delete transactions for this stock
+    deleted_count = db.query(models.Transaction).filter(models.Transaction.stock_id == stock.id).delete()
+    # Delete the stock entry if no other relations
+    db.delete(stock)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Azione {clean_ticker} e relative {deleted_count} transazioni eliminate con successo",
+        "ticker": clean_ticker
     }
 
 @router.get("/{portfolio_id}", response_model=schemas.Portfolio)
@@ -163,3 +145,4 @@ def get_portfolio(portfolio_id: str, db: Session = Depends(get_db)):
     if db_portfolio is None:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     return db_portfolio
+
