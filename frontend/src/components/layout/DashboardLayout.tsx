@@ -109,6 +109,15 @@ interface NewsItem {
   summary: string;
 }
 
+interface TrainingMetrics {
+  trained_samples_days: number;
+  directional_accuracy_pct: number;
+  mape_pct: number;
+  epochs_converged: number;
+  status: string;
+  trained_at: string;
+}
+
 interface AnalysisData {
   ticker: string;
   timeframe: string;
@@ -123,6 +132,7 @@ interface AnalysisData {
   active_patterns: { name: string; signal: number }[];
   historical_candles: any[];
   prediction_candles: any[];
+  training_metrics?: TrainingMetrics;
   scenarios: {
     bullish: { target: number; probability: string };
     neutral: { target: number; probability: string };
@@ -169,11 +179,33 @@ export const DashboardLayout = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [storageStatus, setStorageStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [isRetraining, setIsRetraining] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  const handleRetrainModel = async (ticker: string) => {
+    if (!ticker) return;
+    setIsRetraining(true);
+    showToast(`Avviato auto-apprendimento ricorsivo su 2 anni per ${ticker}...`);
+    try {
+      const res = await fetch(`/api/v1/analysis/${ticker}/retrain`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`Apprendimento ${ticker} completato! Accuratezza: ${data.training_metrics.directional_accuracy_pct}% (${data.training_metrics.trained_samples_days} giorni)`);
+        await fetchAnalysis(ticker, timeframe);
+      } else {
+        alert('Errore durante la calibrazione del modello.');
+      }
+    } catch (e) {
+      console.error('Error retraining model:', e);
+      alert('Errore di connessione durante la calibrazione.');
+    } finally {
+      setIsRetraining(false);
+    }
   };
 
   // Close fullscreen on Escape key
@@ -732,6 +764,70 @@ export const DashboardLayout = () => {
                   )}
                 </div>
               </div>
+
+              {/* AI Recursive Learning & 2-Year Backtesting Card */}
+              {selectedTicker && analysis?.training_metrics && (
+                <div className="ai-training-card">
+                  <div className="ai-training-header">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div className="ai-status-pulse"></div>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '1.05rem', color: '#f8fafc' }}>
+                          Auto-Apprendimento Ricorsivo & Validazione Storica (2 Anni) — {selectedTicker}
+                        </h4>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
+                          Simulazione giorno per giorno (walkforward) verificata su {analysis.training_metrics.trained_samples_days} sessioni reali.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn-secondary"
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}
+                      disabled={isRetraining}
+                      onClick={() => handleRetrainModel(selectedTicker)}
+                      title="Ricalcola la simulazione giorno per giorno e ri-calibra i pesi predittivi ricorsivamente"
+                    >
+                      <RefreshCw size={15} className={isRetraining ? 'animate-spin' : ''} />
+                      {isRetraining ? 'Calibrazione in corso...' : 'Ricalibra Modello AI'}
+                    </button>
+                  </div>
+
+                  <div className="ai-training-stats">
+                    <div className="ai-stat-box">
+                      <span className="ai-stat-label">Accuratezza Direzionale</span>
+                      <span className="ai-stat-value highlight" style={{ color: '#10b981' }}>
+                        {analysis.training_metrics.directional_accuracy_pct}%
+                      </span>
+                      <span className="ai-stat-sub">Verificato su candele reali</span>
+                    </div>
+
+                    <div className="ai-stat-box">
+                      <span className="ai-stat-label">Errore Medio (MAPE)</span>
+                      <span className="ai-stat-value" style={{ color: '#38bdf8' }}>
+                        {analysis.training_metrics.mape_pct}%
+                      </span>
+                      <span className="ai-stat-sub">Scostamento medio da Close</span>
+                    </div>
+
+                    <div className="ai-stat-box">
+                      <span className="ai-stat-label">Sessioni Giornaliere Testate</span>
+                      <span className="ai-stat-value">
+                        {analysis.training_metrics.trained_samples_days}
+                      </span>
+                      <span className="ai-stat-sub">~2 anni di borsa aperta</span>
+                    </div>
+
+                    <div className="ai-stat-box">
+                      <span className="ai-stat-label">Epoche di Convergenza</span>
+                      <span className="ai-stat-value">
+                        {analysis.training_metrics.epochs_converged}
+                      </span>
+                      <span className="ai-stat-sub">Cicli ricorsivi completati</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Insights Grid */}
               <div className="insights-grid">

@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from app.core.database import get_db
 from app.models import domain as models
+from app.core.knowledge_engine.recursive_predictor import RecursivePredictiveEngine
 
 router = APIRouter()
+predictive_engine = RecursivePredictiveEngine()
 
 class TransactionCreate(BaseModel):
     ticker: str
@@ -39,7 +41,7 @@ def get_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_
     return results
 
 @router.post("/")
-def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db)):
+def create_transaction(tx_in: TransactionCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     ticker_clean = tx_in.ticker.strip().upper()
     if not ticker_clean:
         raise HTTPException(status_code=400, detail="Ticker is required")
@@ -75,6 +77,10 @@ def create_transaction(tx_in: TransactionCreate, db: Session = Depends(get_db)):
     db.add(new_tx)
     db.commit()
     db.refresh(new_tx)
+
+    # Launch background recursive training on 2 years of real data if not yet trained
+    if not predictive_engine.load_model(ticker_clean):
+        background_tasks.add_task(predictive_engine.recursive_train, ticker_clean)
     
     return {
         "id": new_tx.id,
