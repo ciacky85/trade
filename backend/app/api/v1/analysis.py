@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
+import urllib.request
+import json
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -117,6 +119,103 @@ def generate_mock_ohlcv(ticker: str, timeframe: str = "1M") -> pd.DataFrame:
     df = pd.DataFrame(data)
     return df
 
+def fetch_real_ohlcv(ticker: str, timeframe: str) -> tuple[pd.DataFrame, float, str]:
+    """
+    Recupera dati OHLCV reali per il titolo e la scala temporale selezionata.
+    Priorità:
+    1. Endpoint Yahoo Chart v8 diretto (query1 / query2) - veloce, affidabile e senza cookie
+    2. yfinance history() con auto_adjust=False
+    3. Fallback simulato realistico (solo se completamente offline)
+    """
+    is_intraday = timeframe in ["1D", "5D"]
+    chart_params = {
+        "1D": {"interval": "5m", "range": "1d"},
+        "5D": {"interval": "15m", "range": "5d"},
+        "1M": {"interval": "1d", "range": "1mo"},
+        "3M": {"interval": "1d", "range": "3mo"},
+        "6M": {"interval": "1d", "range": "6mo"},
+        "YTD": {"interval": "1d", "range": "ytd"},
+        "1Y": {"interval": "1d", "range": "1y"},
+        "5Y": {"interval": "1wk", "range": "5y"},
+        "1W": {"interval": "15m", "range": "5d"},
+    }
+    cfg = chart_params.get(timeframe, {"interval": "1d", "range": "6mo"})
+    default_currency = "EUR" if ticker.endswith(".MI") else "USD"
+
+    # 1. Prova HTTP diretta su Yahoo Chart API v8
+    for host in ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]:
+        try:
+            url = f"https://{host}/v8/finance/chart/{ticker}?interval={cfg['interval']}&range={cfg['range']}&includePrePost=true"
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = json.loads(resp.read().decode("utf-8"))
+
+            res = raw.get("chart", {}).get("result", [])
+            if res:
+                meta = res[0].get("meta", {})
+                currency = meta.get("currency", default_currency)
+                live_price = meta.get("regularMarketPrice")
+                timestamps = res[0].get("timestamp", [])
+                quote = res[0].get("indicators", {}).get("quote", [{}])[0]
+
+                opens = quote.get("open", [])
+                highs = quote.get("high", [])
+                lows = quote.get("low", [])
+                closes = quote.get("close", [])
+                volumes = quote.get("volume", [])
+
+                rows = []
+                for ts, o, h, l, c, v in zip(timestamps, opens, highs, lows, closes, volumes):
+                    if None not in (o, h, l, c) and not pd.isna(c):
+                        t = int(ts) if is_intraday else datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+                        rows.append({
+                            "time": t,
+                            "Open": round(float(o), 2),
+                            "High": round(float(h), 2),
+                            "Low": round(float(l), 2),
+                            "Close": round(float(c), 2),
+                            "Volume": int(v) if v is not None and not pd.isna(v) else 0
+                        })
+
+                if len(rows) >= 2:
+                    df = pd.DataFrame(rows)
+                    if live_price is not None and not pd.isna(live_price) and float(live_price) > 0:
+                        real_p = round(float(live_price), 2)
+                    else:
+                        real_p = round(float(rows[-1]["Close"]), 2)
+                    return df, real_p, currency
+        except Exception as e:
+            print(f"Direct Yahoo Chart query failed on {host} for {ticker}: {e}")
+
+    # 2. Fallback su yfinance
+    try:
+        yf_ticker = yf.Ticker(ticker)
+        yf_period = "5d" if timeframe == "1W" else cfg["range"]
+        hist = yf_ticker.history(period=yf_period, interval=cfg["interval"], auto_adjust=False)
+        if not hist.empty and len(hist) >= 2:
+            hist_reset = hist.reset_index()
+            date_col = "Datetime" if "Datetime" in hist_reset.columns else "Date"
+            if is_intraday:
+                hist_reset["time"] = hist_reset[date_col].apply(lambda x: int(pd.to_datetime(x).timestamp()))
+            else:
+                hist_reset["time"] = hist_reset[date_col].apply(lambda x: pd.to_datetime(x).strftime("%Y-%m-%d"))
+            df = hist_reset[["time", "Open", "High", "Low", "Close", "Volume"]].dropna()
+            fast_p = getattr(yf_ticker.fast_info, 'last_price', None)
+            real_p = round(float(fast_p), 2) if fast_p and float(fast_p) > 0 else round(float(df.iloc[-1]["Close"]), 2)
+            currency = getattr(yf_ticker.fast_info, 'currency', default_currency)
+            return df, real_p, currency
+    except Exception as e:
+        print(f"yfinance fallback failed for {ticker}: {e}")
+
+    # 3. Fallback solo in caso di totale assenza di connettività
+    df = generate_mock_ohlcv(ticker, timeframe=timeframe)
+    real_p = round(float(df.iloc[-1]["Close"]), 2) if not df.empty else 100.0
+    return df, real_p, default_currency
+
+
 @router.get("/{ticker}")
 def analyze_ticker(
     ticker: str,
@@ -124,42 +223,7 @@ def analyze_ticker(
     db: Session = Depends(get_db)
 ):
     clean_ticker = ticker.strip().upper()
-    df = pd.DataFrame()
-    is_intraday = timeframe in ["1D", "5D"]
-
-    # Mapping timeframe to yfinance period & interval
-    yf_config = {
-        "1D": {"period": "1d", "interval": "5m"},
-        "5D": {"period": "5d", "interval": "15m"},
-        "1M": {"period": "1mo", "interval": "1d"},
-        "3M": {"period": "3mo", "interval": "1d"},
-        "6M": {"period": "6mo", "interval": "1d"},
-        "YTD": {"period": "ytd", "interval": "1d"},
-        "1Y": {"period": "1y", "interval": "1d"},
-        "5Y": {"period": "5y", "interval": "1wk"},
-        "1W": {"period": "5d", "interval": "1h"},
-    }
-    cfg = yf_config.get(timeframe, {"period": "6mo", "interval": "1d"})
-
-    # Attempt fetching real data via yfinance (with extended hours prepost=True)
-    yf_ticker = None
-    try:
-        yf_ticker = yf.Ticker(clean_ticker)
-        hist = yf_ticker.history(period=cfg["period"], interval=cfg["interval"], prepost=True)
-        if not hist.empty and len(hist) >= 5:
-            hist_reset = hist.reset_index()
-            # Find the date/datetime column
-            date_col = "Datetime" if "Datetime" in hist_reset.columns else "Date"
-            if is_intraday:
-                hist_reset["time"] = hist_reset[date_col].apply(lambda x: int(pd.to_datetime(x).timestamp()))
-            else:
-                hist_reset["time"] = hist_reset[date_col].apply(lambda x: pd.to_datetime(x).strftime("%Y-%m-%d"))
-            df = hist_reset
-    except Exception as e:
-        print(f"yfinance fetch failed for {clean_ticker} with scale {timeframe}: {e}")
-
-    if df.empty or len(df) < 5:
-        df = generate_mock_ohlcv(clean_ticker, timeframe=timeframe)
+    df, current_price, currency = fetch_real_ohlcv(clean_ticker, timeframe)
 
     # Calculate indicators if enough data points
     try:
@@ -181,6 +245,12 @@ def analyze_ticker(
         print(f"Pattern detection error: {e}")
         candlestick_signals = {"bullish_count": 2, "bearish_count": 0, "patterns": []}
 
+    # Compute bias score and signal counts from candlestick patterns
+    bullish_count = candlestick_signals.get("bullish_count", 0)
+    bearish_count = candlestick_signals.get("bearish_count", 0)
+    total_signals = bullish_count + bearish_count
+    bias_score = (bullish_count - bearish_count) / max(total_signals, 1)
+
     # Format historical candles for chart
     candles = []
     for _, row in df.iterrows():
@@ -193,21 +263,15 @@ def analyze_ticker(
             "volume": int(row["Volume"]) if "Volume" in row and not pd.isna(row["Volume"]) else 0
         })
 
-    last_candle = candles[-1]
-    current_price = last_candle["close"]
-
-    # Incorporate real-time / after-hours price if available via fast_info
-    if yf_ticker is not None:
-        try:
-            fast_price = getattr(yf_ticker.fast_info, 'last_price', None)
-            if fast_price and float(fast_price) > 0 and not pd.isna(fast_price):
-                current_price = round(float(fast_price), 2)
-                if candles:
-                    candles[-1]["close"] = current_price
-                    candles[-1]["high"] = max(candles[-1]["high"], current_price)
-                    candles[-1]["low"] = min(candles[-1]["low"], current_price)
-        except Exception:
-            pass
+    if candles:
+        last_candle = candles[-1]
+        # Align last candle with current live price if available
+        if current_price and current_price > 0:
+            last_candle["close"] = current_price
+            last_candle["high"] = max(last_candle["high"], current_price)
+            last_candle["low"] = min(last_candle["low"], current_price)
+    else:
+        last_candle = None
 
     # Load or train the 2-year walkforward model for this ticker
     trained_model = predictive_engine.load_model(clean_ticker)
@@ -249,6 +313,7 @@ def analyze_ticker(
 
     result = {
         "ticker": clean_ticker,
+        "currency": currency,
         "timeframe": timeframe,
         "analyzed_at": datetime.utcnow().isoformat(),
         "current_price": current_price,

@@ -120,6 +120,7 @@ interface TrainingMetrics {
 
 interface AnalysisData {
   ticker: string;
+  currency?: string;
   timeframe: string;
   current_price: number;
   recommendation: string;
@@ -139,6 +140,12 @@ interface AnalysisData {
     bearish: { target: number; probability: string };
   };
 }
+
+const getCurrencySymbol = (ticker?: string, currency?: string): string => {
+  if (currency === 'EUR' || (ticker && ticker.toUpperCase().endsWith('.MI'))) return '€';
+  if (currency === 'GBP' || (ticker && ticker.toUpperCase().endsWith('.L'))) return '£';
+  return '$';
+};
 
 const CLIENT_STOCK_CATALOG = [
   // Top FTSE MIB & Italian Stocks
@@ -727,7 +734,7 @@ export const DashboardLayout = () => {
 
         <div className="sidebar-footer">
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Docker Server</span>
-          <div className="version-badge">v0.5.0</div>
+          <div className="version-badge">v0.6.0</div>
         </div>
       </aside>
 
@@ -801,7 +808,7 @@ export const DashboardLayout = () => {
                 <div className="stat-card">
                   <h3>Prezzo Attuale {selectedTicker || '—'}</h3>
                   <div className="stat-value" style={{ color: '#f8fafc' }}>
-                    ${analysis?.current_price ? analysis.current_price.toFixed(2) : '0.00'}
+                    {getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.current_price ? analysis.current_price.toFixed(2) : '0.00'}
                   </div>
                   <div className="stat-change positive">Rapporto R/R: {analysis?.risk_reward_ratio || '1:2.4'}</div>
                 </div>
@@ -997,10 +1004,10 @@ export const DashboardLayout = () => {
                     <p>{analysis?.reason || 'Fase di consolidamento. Attendere conferma al di sopra del livello di resistenza prima di incrementare la posizione.'}</p>
                     <div className="action-metrics">
                       <div className="action-metric-item">
-                        Prezzo Obiettivo: <strong>${analysis?.target_price?.toFixed(2) || '171.00'}</strong>
+                        Prezzo Obiettivo: <strong>{getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.target_price ? analysis.target_price.toFixed(2) : '—'}</strong>
                       </div>
                       <div className="action-metric-item">
-                        Stop Loss: <strong>${analysis?.stop_loss?.toFixed(2) || '148.50'}</strong>
+                        Stop Loss: <strong>{getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.stop_loss ? analysis.stop_loss.toFixed(2) : '—'}</strong>
                       </div>
                       <div className="action-metric-item">
                         Rapporto R/R: <strong>{analysis?.risk_reward_ratio || '1:2.4'}</strong>
@@ -1041,7 +1048,7 @@ export const DashboardLayout = () => {
                         <th>Prezzo Medio</th>
                         <th>Prezzo Live</th>
                         <th>Controvalore</th>
-                        <th>P&L ($ / %)</th>
+                        <th>P&L / Rendimento</th>
                         <th>Azioni</th>
                       </tr>
                     </thead>
@@ -1052,11 +1059,11 @@ export const DashboardLayout = () => {
                             <td><strong>{pos.ticker}</strong></td>
                             <td>{pos.company_name}</td>
                             <td>{pos.quantity}</td>
-                            <td>${pos.avg_buy_price.toFixed(2)}</td>
-                            <td>${pos.current_price.toFixed(2)}</td>
-                            <td>${pos.total_value.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.avg_buy_price.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.current_price.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.total_value.toFixed(2)}</td>
                             <td style={{ color: pos.pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                              {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
+                              {pos.pnl >= 0 ? '+' : ''}{getCurrencySymbol(pos.ticker)}{pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
                             </td>
                             <td>
                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1193,11 +1200,11 @@ export const DashboardLayout = () => {
                             <td><strong>{pos.ticker}</strong></td>
                             <td>{pos.company_name}</td>
                             <td>{pos.quantity}</td>
-                            <td>${pos.avg_buy_price.toFixed(2)}</td>
-                            <td>${pos.current_price.toFixed(2)}</td>
-                            <td>${pos.total_value.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.avg_buy_price.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.current_price.toFixed(2)}</td>
+                            <td>{getCurrencySymbol(pos.ticker)}{pos.total_value.toFixed(2)}</td>
                             <td style={{ color: pos.pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                              {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
+                              {pos.pnl >= 0 ? '+' : ''}{getCurrencySymbol(pos.ticker)}{pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
                             </td>
                             <td>
                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1514,7 +1521,7 @@ export const DashboardLayout = () => {
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 news_cache/ (cache articoli & sentiment)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 postgres_data/ (database PostgreSQL persistente)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 redis_data/ (cache e broker Celery)</div>
-                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.5.0)</div>
+                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.6.0)</div>
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
@@ -1713,7 +1720,7 @@ export const DashboardLayout = () => {
               <div className="fullscreen-title-area">
                 <h2 className="fullscreen-ticker-title">{selectedTicker} — Grafico Storico & Previsione Sovrapposta</h2>
                 <div className="fullscreen-price-badge">
-                  ${analysis?.current_price ? analysis.current_price.toFixed(2) : '158.40'}
+                  {getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.current_price ? analysis.current_price.toFixed(2) : '—'}
                 </div>
                 <span className={`type-badge ${analysis?.recommendation?.toLowerCase() || 'hold'}`}>
                   {analysis?.recommendation_label || translateRec(analysis?.recommendation)} ({analysis?.confidence || 86}% Confidenza)
@@ -1795,9 +1802,9 @@ export const DashboardLayout = () => {
 
             <div className="fullscreen-footer">
               <div>
-                <span>Prezzo Obiettivo: <strong style={{ color: '#10b981' }}>${analysis?.target_price?.toFixed(2) || '171.00'}</strong></span>
+                <span>Prezzo Obiettivo: <strong style={{ color: '#10b981' }}>{getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.target_price ? analysis.target_price.toFixed(2) : '—'}</strong></span>
                 <span style={{ margin: '0 12px' }}>•</span>
-                <span>Stop Loss: <strong style={{ color: '#ef4444' }}>${analysis?.stop_loss?.toFixed(2) || '148.50'}</strong></span>
+                <span>Stop Loss: <strong style={{ color: '#ef4444' }}>{getCurrencySymbol(selectedTicker, analysis?.currency)}{analysis?.stop_loss ? analysis.stop_loss.toFixed(2) : '—'}</strong></span>
                 <span style={{ margin: '0 12px' }}>•</span>
                 <span>Rapporto R/R: <strong style={{ color: '#f8fafc' }}>{analysis?.risk_reward_ratio || '1:2.4'}</strong></span>
               </div>

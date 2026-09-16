@@ -66,12 +66,7 @@ export const CombinedChart = ({
       wickDownColor: '#ef4444',
     });
 
-    const candleData = (data && data.length > 0) ? data : [
-      { time: '2026-09-01', open: 150, high: 155, low: 149, close: 154 },
-      { time: '2026-09-02', open: 154, high: 158, low: 153, close: 156 },
-      { time: '2026-09-03', open: 156, high: 157, low: 151, close: 152 },
-      { time: '2026-09-04', open: 152, high: 160, low: 151, close: 159 },
-    ];
+    const candleData = (data && data.length > 0) ? data : [];
     candlestickSeries.setData(candleData as any);
 
     // Prediction series (Futuristic Cyan) - rendered only if showPredictions is enabled and data exists

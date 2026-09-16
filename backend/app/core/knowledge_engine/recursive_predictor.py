@@ -1,5 +1,6 @@
 import os
 import json
+import urllib.request
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -37,9 +38,49 @@ class RecursivePredictiveEngine:
     def fetch_2year_history(self, ticker: str) -> pd.DataFrame:
         """
         Scarica almeno 2 anni di candele giornaliere reali da Yahoo Finance.
+        Priorità: direct endpoint Chart v8 (query1/query2), fallback su yfinance.
         """
+        clean_ticker = ticker.strip().upper()
+        # 1. Prova HTTP diretta
+        for host in ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]:
+            try:
+                url = f"https://{host}/v8/finance/chart/{clean_ticker}?interval=1d&range=2y"
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw = json.loads(resp.read().decode("utf-8"))
+                res = raw.get("chart", {}).get("result", [])
+                if res:
+                    timestamps = res[0].get("timestamp", [])
+                    quote = res[0].get("indicators", {}).get("quote", [{}])[0]
+                    opens = quote.get("open", [])
+                    highs = quote.get("high", [])
+                    lows = quote.get("low", [])
+                    closes = quote.get("close", [])
+                    volumes = quote.get("volume", [])
+
+                    rows = []
+                    for ts, o, h, l, c, v in zip(timestamps, opens, highs, lows, closes, volumes):
+                        if None not in (o, h, l, c) and not pd.isna(c):
+                            dt = datetime.utcfromtimestamp(ts)
+                            rows.append({
+                                "Date": dt,
+                                "Open": float(o),
+                                "High": float(h),
+                                "Low": float(l),
+                                "Close": float(c),
+                                "Volume": float(v) if v is not None and not pd.isna(v) else 0.0
+                            })
+                    if len(rows) >= 30:
+                        return pd.DataFrame(rows)
+            except Exception as e:
+                print(f"Direct chart fetch failed for {clean_ticker} on {host}: {e}")
+
+        # 2. Fallback su yfinance
         try:
-            yf_ticker = yf.Ticker(ticker)
+            yf_ticker = yf.Ticker(clean_ticker)
             df = yf_ticker.history(period="2y", interval="1d", auto_adjust=True)
             if df is not None and not df.empty and len(df) >= 30:
                 # Standardize columns
@@ -49,7 +90,7 @@ class RecursivePredictiveEngine:
                 df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].dropna()
                 return df
         except Exception as e:
-            print(f"Errore download 2 anni per {ticker}: {e}")
+            print(f"Errore download 2 anni per {clean_ticker}: {e}")
 
         return pd.DataFrame()
 

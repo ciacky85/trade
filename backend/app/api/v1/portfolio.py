@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import urllib.request
+import json
 from app.core.database import get_db
 from app.models import domain as models
 from app.schemas import domain as schemas
@@ -8,6 +10,28 @@ import yfinance as yf
 from datetime import datetime
 
 router = APIRouter()
+
+def fetch_live_market_price(ticker: str) -> Optional[float]:
+    """Recupera il prezzo live ufficiale tramite endpoint Chart v8 veloce di Yahoo Finance."""
+    clean = ticker.strip().upper()
+    for host in ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]:
+        try:
+            url = f"https://{host}/v8/finance/chart/{clean}?interval=1d&range=1d"
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            res = data.get("chart", {}).get("result", [])
+            if res:
+                meta = res[0].get("meta", {})
+                price = meta.get("regularMarketPrice")
+                if price is not None and float(price) > 0:
+                    return round(float(price), 2)
+        except Exception:
+            pass
+    return None
 
 @router.get("/", response_model=List[schemas.Portfolio])
 def get_portfolios(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
@@ -89,15 +113,19 @@ def get_portfolio_summary(db: Session = Depends(get_db)):
             baseline = avg_buy_price if avg_buy_price > 0 else 100.0
             current_price = default_prices.get(ticker, round(baseline * 1.02, 2))
             
-            # Try fetching real quote
-            try:
-                quote = yf.Ticker(ticker)
-                fast_info = quote.fast_info
-                last_price = getattr(fast_info, 'last_price', None)
-                if last_price and float(last_price) > 0:
-                    current_price = round(float(last_price), 2)
-            except Exception:
-                pass
+            # Try fetching real quote: first via Yahoo Chart direct, then via fast_info
+            live_p = fetch_live_market_price(ticker)
+            if live_p is not None and live_p > 0:
+                current_price = live_p
+            else:
+                try:
+                    quote = yf.Ticker(ticker)
+                    fast_info = quote.fast_info
+                    last_price = getattr(fast_info, 'last_price', None)
+                    if last_price and float(last_price) > 0:
+                        current_price = round(float(last_price), 2)
+                except Exception:
+                    pass
 
             pos_value = round(qty * current_price, 2)
             pos_cost = round(data["total_cost"], 2)
