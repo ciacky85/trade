@@ -302,13 +302,17 @@ export const DashboardLayout = () => {
       } finally {
         setIsSearchingStocks(false);
       }
-    }, 250);
+    }, 150);
 
     return () => clearTimeout(timer);
   }, [stockSearchQuery]);
 
   const handleStockSearchInput = (val: string) => {
     setStockSearchQuery(val);
+    const clean = val.trim().toUpperCase();
+    if (clean && !val.includes('—') && clean.length <= 10 && !clean.includes(' ')) {
+      setTxFormData(prev => ({ ...prev, ticker: clean }));
+    }
     if (val.trim().length >= 1) {
       setShowSuggestions(true);
     } else {
@@ -577,6 +581,9 @@ export const DashboardLayout = () => {
               onClick={() => setActiveTab('portfolio')}
             >
               <PieChart size={19} /> Portfolio & Transazioni
+              {portfolio?.active_positions_count !== undefined && portfolio.active_positions_count > 0 && (
+                <span className="nav-badge">{portfolio.active_positions_count}</span>
+              )}
             </button>
             <button
               className={`nav-item ${activeTab === 'analysis' ? 'active' : ''}`}
@@ -607,7 +614,7 @@ export const DashboardLayout = () => {
 
         <div className="sidebar-footer">
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Docker Server</span>
-          <div className="version-badge">v0.3.0</div>
+          <div className="version-badge">v0.4.0</div>
         </div>
       </aside>
 
@@ -629,7 +636,7 @@ export const DashboardLayout = () => {
           </form>
 
           <div className="header-actions">
-            <button className="btn-primary" onClick={() => setIsTxModalOpen(true)}>
+            <button className="btn-primary" onClick={openNewTransactionModal}>
               <PlusCircle size={18} /> Nuova Transazione
             </button>
           </div>
@@ -887,6 +894,150 @@ export const DashboardLayout = () => {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Dashboard Section: Portafoglio Posizioni Attive */}
+              <div className="insight-card" style={{ marginTop: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <PieChart size={20} color="#38bdf8" /> Portafoglio Posizioni Attive ({portfolio?.active_positions_count || 0})
+                    </h3>
+                    <p style={{ margin: '4px 0 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      Riepilogo in tempo reale delle posizioni detenute con profitto/perdita e accesso rapido ai grafici.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn-secondary" style={{ fontSize: '0.85rem' }} onClick={() => setActiveTab('portfolio')}>
+                      Vedi Registro Completo →
+                    </button>
+                    <button className="btn-primary" style={{ fontSize: '0.85rem' }} onClick={openNewTransactionModal}>
+                      <PlusCircle size={16} /> Nuova Transazione
+                    </button>
+                  </div>
+                </div>
+
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Ticker</th>
+                        <th>Azienda</th>
+                        <th>Quantità</th>
+                        <th>Prezzo Medio</th>
+                        <th>Prezzo Live</th>
+                        <th>Controvalore</th>
+                        <th>P&L ($ / %)</th>
+                        <th>Azioni</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {portfolio?.positions && portfolio.positions.length > 0 ? (
+                        portfolio.positions.map((pos) => (
+                          <tr key={`dash-${pos.ticker}`}>
+                            <td><strong>{pos.ticker}</strong></td>
+                            <td>{pos.company_name}</td>
+                            <td>{pos.quantity}</td>
+                            <td>${pos.avg_buy_price.toFixed(2)}</td>
+                            <td>${pos.current_price.toFixed(2)}</td>
+                            <td>${pos.total_value.toFixed(2)}</td>
+                            <td style={{ color: pos.pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                              {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)} ({pos.pnl_pct}%)
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <button
+                                  className="btn-secondary"
+                                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                                  onClick={() => {
+                                    setSelectedTicker(pos.ticker);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  title="Visualizza grafico e previsione di questo titolo"
+                                >
+                                  Mostra Grafico
+                                </button>
+                                <button
+                                  className="btn-delete-action"
+                                  title={`Elimina ${pos.ticker} dal portafoglio`}
+                                  onClick={() => handleDeletePosition(pos.ticker)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <span>Nessuna posizione attualmente aperta nel portafoglio.</span>
+                              <button className="btn-primary" style={{ marginTop: '6px' }} onClick={openNewTransactionModal}>
+                                <PlusCircle size={16} /> Aggiungi Prima Transazione
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Dashboard Section: Ultime Transazioni Recenti */}
+              <div className="insight-card" style={{ marginTop: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '10px' }}>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={20} color="#38bdf8" /> Ultime Transazioni Eseguite
+                  </h3>
+                  <button className="btn-secondary" style={{ fontSize: '0.85rem' }} onClick={() => setActiveTab('portfolio')}>
+                    Tutte le Transazioni ({transactions.length}) →
+                  </button>
+                </div>
+
+                <div className="table-container">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Tipo</th>
+                        <th>Ticker</th>
+                        <th>Quantità</th>
+                        <th>Prezzo Eseguito</th>
+                        <th>Totale</th>
+                        <th>Commissioni</th>
+                        <th>Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.length > 0 ? (
+                        transactions.slice(0, 5).map((tx) => (
+                          <tr key={`dash-tx-${tx.id}`}>
+                            <td>{tx.date ? new Date(tx.date).toLocaleDateString() : '-'}</td>
+                            <td>
+                              <span className={`type-badge ${tx.type.toLowerCase()}`}>
+                                {tx.type}
+                              </span>
+                            </td>
+                            <td><strong>{tx.ticker}</strong></td>
+                            <td>{tx.quantity}</td>
+                            <td>${tx.price.toFixed(2)}</td>
+                            <td>${tx.total.toFixed(2)}</td>
+                            <td>${tx.fees ? tx.fees.toFixed(2) : '0.00'}</td>
+                            <td>{tx.notes || '-'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>
+                            Nessuna transazione recente registrata.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </>
@@ -1250,7 +1401,7 @@ export const DashboardLayout = () => {
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 news_cache/ (cache articoli & sentiment)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 postgres_data/ (database PostgreSQL persistente)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 redis_data/ (cache e broker Celery)</div>
-                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.3.0)</div>
+                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.4.0)</div>
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
@@ -1289,10 +1440,17 @@ export const DashboardLayout = () => {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
+                          if (stockSuggestions.length > 0) {
+                            handleSelectStock(stockSuggestions[0]);
+                          } else if (stockSearchQuery.trim()) {
+                            const customTicker = stockSearchQuery.trim().toUpperCase();
+                            setTxFormData(prev => ({ ...prev, ticker: customTicker, company_name: `${customTicker} Corp` }));
+                            setShowSuggestions(false);
+                          }
                         }
                       }}
                       onFocus={() => {
-                        if (stockSuggestions.length > 0) setShowSuggestions(true);
+                        if (stockSuggestions.length > 0 || stockSearchQuery.trim().length >= 1) setShowSuggestions(true);
                       }}
                     />
                     {isSearchingStocks && (
@@ -1315,6 +1473,23 @@ export const DashboardLayout = () => {
                           <span className="autocomplete-exchange">{s.exchange}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {showSuggestions && !isSearchingStocks && stockSuggestions.length === 0 && stockSearchQuery.trim().length >= 1 && (
+                    <div className="autocomplete-dropdown">
+                      <div
+                        className="autocomplete-item"
+                        onClick={() => {
+                          const tk = stockSearchQuery.trim().toUpperCase();
+                          setTxFormData(prev => ({ ...prev, ticker: tk, company_name: `${tk} Corp` }));
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        <span className="autocomplete-ticker">{stockSearchQuery.trim().toUpperCase()}</span>
+                        <span className="autocomplete-name">Usa come ticker personalizzato</span>
+                        <span className="autocomplete-exchange">MANUALE</span>
+                      </div>
                     </div>
                   )}
                 </div>

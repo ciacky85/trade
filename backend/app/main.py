@@ -25,7 +25,7 @@ except Exception as e:
 
 app = FastAPI(
     title="TradeAnalyzer Pro API",
-    version="v0.3.0",
+    version="v0.4.0",
     description="Professional algorithmic trading analysis, candlestick detection, and portfolio engine."
 )
 
@@ -41,4 +41,4 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "version": "v0.3.0"}
+    return {"status": "ok", "version": "v0.4.0"}

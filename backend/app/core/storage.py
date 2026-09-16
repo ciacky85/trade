@@ -103,7 +103,7 @@ def init_storage():
     system_file = os.path.join(STORAGE_PATH, "system_info.json")
     status_data = {
         "app_name": "TradeAnalyzer Pro",
-        "version": "v0.3.0",
+        "version": "v0.4.0",
         "storage_path": STORAGE_PATH,
         "last_initialized": datetime.utcnow().isoformat(),
         "status": "ready"

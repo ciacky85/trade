@@ -1,8 +1,9 @@
 # 📊 TradeAnalyzer Pro — Specifica Tecnica Completa
 
-**Versione Attuale:** v0.3.0
+**Versione Attuale:** v0.4.0
 
 ## Changelog
+- **v0.4.0**: Ripristino e visibilità immediata del portafoglio e delle ultime transazioni direttamente nella schermata Dashboard principale (oltre alla scheda dedicata Portfolio); risoluzione bug ricerca e autocompletamento titoli (aggiunta `urllib.parse` mancante in backend per chiamate Yahoo Search, estensione del catalogo offline a oltre 70 titoli italiani FTSE MIB e internazionali con sinonimi/alias, opzione manuale per ticker personalizzati, pre-popolamento automatico prezzo live da Yahoo Finance); debouncing ottimizzato a 150ms con selezione da tastiera (Enter); irrobustimento gestione valori nulli in `/api/v1/portfolios/summary` e `/api/v1/transactions/`.
 - **v0.3.0**: Risoluzione blocco eliminazione posizioni (gestione sicura vincoli FK in cascata), protezione modale di inserimento (debouncing ricerca 250ms, prevenzione invio involontario con Enter, rimozione click-dismiss accidentale su overlay), configurazione proxy Vite per sviluppo locale, e allineamento globale numeri di versione.
 - **v0.2.0**: Motore di apprendimento ricorsivo con backtesting giorno per giorno su storico a 2 anni (~504 sessioni), calibrazione pesi con feedback loss (trend, momentum, pattern candlestick, volatilità), notizie reali e link autentici verificati da Yahoo Finance/RSS, autocompletamento titoli reali con quotazioni in tempo reale, grafici limitati ai soli titoli registrati in portafoglio.
 - **v0.1.0**: Setup infrastruttura base, Docker stack su porta 3090, mappatura volumi su `/srv/docker_conf/trade` (`/strategies`, `/knowledge`, `/outputs`, `/results`, `/backtests`, `/news_cache`, `/postgres_data`, `/redis_data`), frontend reattivo e interattivo con navigazione completa (Dashboard con candele reali e forecast sovrapposto, Transazioni & Portafoglio con dialog modale, Fonti grafici esterne, Knowledge Engine con catalogo strategie e 60+ pattern candlestick, Notizie & Sentiment AI FinBERT, Pagina stato archiviazione persistente).

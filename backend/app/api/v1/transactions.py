@@ -25,17 +25,19 @@ def get_transactions(skip: int = 0, limit: int = 100, db: Session = Depends(get_
     txs = db.query(models.Transaction).order_by(models.Transaction.date.desc()).offset(skip).limit(limit).all()
     results = []
     for tx in txs:
+        qty = float(tx.quantity or 0.0)
+        pr = float(tx.price or 0.0)
         results.append({
             "id": tx.id,
             "ticker": tx.stock.ticker if tx.stock else "",
             "company_name": tx.stock.company_name if tx.stock else "",
-            "type": tx.type,
+            "type": tx.type or "BUY",
             "date": tx.date.isoformat() if tx.date else "",
-            "quantity": tx.quantity,
-            "price": tx.price,
-            "total": round(tx.quantity * tx.price, 2),
-            "fees": tx.fees,
-            "notes": tx.notes,
+            "quantity": qty,
+            "price": pr,
+            "total": round(qty * pr, 2),
+            "fees": float(tx.fees or 0.0),
+            "notes": tx.notes or "",
             "created_at": tx.created_at.isoformat() if tx.created_at else ""
         })
     return results
