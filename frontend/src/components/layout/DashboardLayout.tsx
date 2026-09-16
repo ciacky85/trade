@@ -323,6 +323,12 @@ export const DashboardLayout = () => {
   }, []);
 
   useEffect(() => {
+    if (activeTab === 'analysis') {
+      fetchChartSources();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     if (selectedTicker) {
       fetchAnalysis(selectedTicker, timeframe);
     } else {
@@ -489,7 +495,9 @@ export const DashboardLayout = () => {
       const res = await fetch('/api/v1/chart-sources/');
       if (res.ok) {
         const data = await res.json();
-        setChartSources(data);
+        setChartSources(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to fetch chart sources, status:', res.status);
       }
     } catch (e) {
       console.error('Error fetching chart sources:', e);
@@ -603,36 +611,54 @@ export const DashboardLayout = () => {
 
   const handleCreateChartSource = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chartSourceUrl.trim()) return;
+    const cleanUrl = chartSourceUrl.trim();
+    const cleanTicker = chartSourceTicker.trim().toUpperCase();
+    if (!cleanUrl || !cleanTicker) return;
+
+    let detectedType = 'tradingview';
+    const lowerUrl = cleanUrl.toLowerCase();
+    if (lowerUrl.includes('finviz.com')) detectedType = 'finviz';
+    else if (lowerUrl.includes('yahoo.com') || lowerUrl.includes('yahoofinance')) detectedType = 'yahoo';
+    else if (lowerUrl.includes('investing.com')) detectedType = 'investing';
+    else if (lowerUrl.includes('marketwatch.com')) detectedType = 'marketwatch';
+    else if (!lowerUrl.includes('tradingview.com')) detectedType = 'web';
+
     try {
       const res = await fetch('/api/v1/chart-sources/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ticker: chartSourceTicker,
-          url: chartSourceUrl,
-          source_type: 'tradingview'
+          ticker: cleanTicker,
+          url: cleanUrl,
+          source_type: detectedType
         })
       });
       if (res.ok) {
-        showToast(`Fonte grafico per ${chartSourceTicker} salvata!`);
+        showToast(`Fonte grafico per ${cleanTicker} salvata!`);
         setChartSourceUrl('');
-        fetchChartSources();
+        await fetchChartSources();
+      } else {
+        const err = await res.json().catch(() => null);
+        alert(`Errore salvataggio fonte: ${err?.detail || 'Errore HTTP ' + res.status}`);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      alert(`Errore di comunicazione: ${e?.message || 'Impossibile connettersi al backend'}`);
     }
   };
 
   const handleDeleteChartSource = async (id: string) => {
+    if (!confirm('Sei sicuro di voler rimuovere questa fonte grafico?')) return;
     try {
       const res = await fetch(`/api/v1/chart-sources/${id}`, { method: 'DELETE' });
       if (res.ok) {
-        showToast('Fonte grafico rimossa');
-        fetchChartSources();
+        showToast('Fonte grafico rimossa con successo');
+        await fetchChartSources();
+      } else {
+        const err = await res.json().catch(() => null);
+        alert(`Errore eliminazione fonte: ${err?.detail || 'Errore HTTP ' + res.status}`);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      alert(`Errore di comunicazione: ${e?.message || 'Impossibile connettersi al backend'}`);
     }
   };
 
@@ -734,7 +760,7 @@ export const DashboardLayout = () => {
 
         <div className="sidebar-footer">
           <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Docker Server</span>
-          <div className="version-badge">v0.6.0</div>
+          <div className="version-badge">v0.7.0</div>
         </div>
       </aside>
 
@@ -1521,7 +1547,7 @@ export const DashboardLayout = () => {
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 news_cache/ (cache articoli & sentiment)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 postgres_data/ (database PostgreSQL persistente)</div>
                   <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📁 redis_data/ (cache e broker Celery)</div>
-                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.6.0)</div>
+                  <div className="tree-item" style={{ paddingLeft: '1.5rem' }}>📄 system_info.json (metadati versione v0.7.0)</div>
                 </div>
 
                 <div style={{ marginTop: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>

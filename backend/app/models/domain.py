@@ -32,6 +32,7 @@ class Stock(Base):
     
     transactions = relationship("Transaction", back_populates="stock")
     analysis = relationship("Analysis", back_populates="stock")
+    chart_sources = relationship("ChartSource", back_populates="stock", cascade="all, delete-orphan")
 
 class Transaction(Base):
     __tablename__ = "transaction"
@@ -58,6 +59,8 @@ class ChartSource(Base):
     last_scraped_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
+
+    stock = relationship("Stock", back_populates="chart_sources")
 
 class News(Base):
     __tablename__ = "news"
