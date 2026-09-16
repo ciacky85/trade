@@ -23,8 +23,12 @@ class RecursivePredictiveEngine:
 
     def __init__(self):
         self.detector = CandlestickPatternDetector()
-        self.storage_dir = os.path.join(settings.STORAGE_DIR, "knowledge")
-        os.makedirs(self.storage_dir, exist_ok=True)
+        storage_base = getattr(settings, "STORAGE_DIR", getattr(settings, "STORAGE_PATH", os.getenv("STORAGE_PATH", "/app/storage")))
+        self.storage_dir = os.path.join(storage_base, "knowledge")
+        try:
+            os.makedirs(self.storage_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Could not create knowledge storage directory: {e}")
 
     def _get_model_path(self, ticker: str) -> str:
         clean = ticker.upper().replace('^', '').replace('=', '').replace('/', '_')
